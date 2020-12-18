@@ -26,7 +26,7 @@ with open(VERSION_FILE) as buff:
 if len(set(("test", "easy_install")).intersection(sys.argv)) > 0:
     import setuptools
 
-tests_require = []
+tests_require=['nose']
 extra_setuptools_args = {}
 
 setup(
@@ -42,6 +42,7 @@ setup(
     maintainer_email="cluhmann@gmail.com",
     packages=find_packages(exclude=["tests", "test_*"]),
     tests_require=tests_require,
+    test_suite='nose.collector',
     license="MIT",
     **extra_setuptools_args,
 )

@@ -4,8 +4,49 @@ import scipy.optimize
 import scipy.stats
 import patsy
 
+tol = 1e-6
 
 class segmented:
+    """
+    Class implementing segmented regression.
+
+    ...
+
+    Attributes
+    ----------
+    models : list
+        List of model specifications in patsy format.
+
+    data : Pandas Dataframe
+        Data to be modeled.
+
+    num_segments: int
+        Number of segments to be modeled.
+
+    changepoints : list
+        List of changepoint specifications in patsy format.
+
+    data : Pandas Dataframe
+        Data to be modeled.
+
+    Methods
+    -------
+    set_models(models, validate=False)
+        Set the segment specification(s).
+    set_changepoints(changepoints, validate=False)
+        Set the changepoint specification(s).
+    set_num_segments(num_segments, validate=False)
+        Set the number of segments.
+    set_data(data, validate=False)
+        Set the data to be modeled.
+    validate_parameters()
+        Validate the object's current parameter values.
+    fit()
+        Estimate model parameters.
+    summary()
+        Provide information regarding the parameter estimation procedure.
+    """
+
     def __init__(self, models, changepoints=None, num_segments=None, data=None):
 
         self.models = None
@@ -15,38 +56,42 @@ class segmented:
         self.result = None
         self.par_x = None
 
-        self.set_models(models)
-        self.set_changepoints(changepoints)
-        self.set_num_segments(num_segments)
-        self.set_data(data)
-
-    def set_data(self, data=None):
-
-        self.data = data
-
-        # validate
+        self.set_models(models, validate=False)
+        self.set_changepoints(changepoints, validate=False)
+        self.set_num_segments(num_segments, validate=False)
+        self.set_data(data, validate=False)
         self.validate_parameters()
 
-    def set_models(self, models=None):
+    def set_data(self, data=None, validate=True):
+        self.data = data
+
+        if validate:
+            # validate
+            self.validate_parameters()
+
+    def set_models(self, models=None, validate=True):
 
         self.models = models
 
-        # validate
-        self.validate_parameters()
+        if validate:
+            # validate
+            self.validate_parameters()
 
-    def set_changepoints(self, changepoints=None):
+    def set_changepoints(self, changepoints=None, validate=True):
 
         self.changepoints = changepoints
 
-        # validate
-        self.validate_parameters()
+        if validate:
+            # validate
+            self.validate_parameters()
 
-    def set_num_segments(self, num_segments):
+    def set_num_segments(self, num_segments, validate=True):
 
         self.num_segments = num_segments
 
-        # validate
-        self.validate_parameters()
+        if validate:
+            # validate
+            self.validate_parameters()
 
     def validate_parameters(self):
 
@@ -57,7 +102,7 @@ class segmented:
                     "Received an invalid data object.  Data must be a pandas dataframe."
                 )
         if self.models is not None:
-            if not (isinstance(self.models, list) or isinstance(self.models, string)):
+            if not (isinstance(self.models, list) or isinstance(self.models, str)):
                 raise ValueError(
                     "Received an invalid models object.  Models must be a patsy string or a list of such strings."
                 )
@@ -82,12 +127,12 @@ class segmented:
                     "Number of segments implied by changepoint specification conflicts with the specified number of segments."
                 )
         if isinstance(self.changepoints, list) and isinstance(self.models, list):
-            if len(self.changepoints) != len(self.models) - 1:
+            if len(self.changepoints) + 2 != len(self.models):
                 raise ValueError(
                     "Number of segments implied by changepoint specification conflicts with the model specification."
                 )
         if isinstance(self.models, list) and (self.num_segments is not None):
-            if len(self.models) != self.num_segments:
+            if len(self.models) + 1 != self.num_segments:
                 raise ValueError(
                     "Number of segments implied by model specification conflicts with the specified number of segments."
                 )
@@ -95,15 +140,15 @@ class segmented:
         # if number of segments is implied but not set, set it
         if self.num_segments is None:
             if isinstance(self.models, list):
-                self.num_segments = len(self.models)
+                self.num_segments = len(self.models) + 1
             elif isinstance(self.changepoints, list):
                 self.num_segments = len(self.changepoints)
             else:
                 raise ValueError("Number of segments must be specified.")
 
         # convert raw patsy strings to lists of patsy strings
-        if isinstance(self.models, str):
-            self.models = self.num_segments * [self.models]
+        #if isinstance(self.models, str):
+        #    self.models = self.num_segments * [self.models]
         if isinstance(self.changepoints, str):
             self.changepoints = self.num_segments * [self.changepoints]
 
@@ -178,7 +223,7 @@ class segmented:
             )
 
             p = scipy.stats.norm.pdf(y_1_dmat[0], y_hat, error_sd)
-            return -1 * np.sum(np.log(p))
+            return -1 * np.sum(np.log(np.clip(p, tol, 1-tol)))
 
         self.result = scipy.optimize.minimize(
             logp, x0, args=(self.data,), method="Nelder-Mead", options={"maxiter": 1000}
