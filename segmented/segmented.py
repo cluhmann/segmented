@@ -6,6 +6,7 @@ import patsy
 
 tol = 1e-6
 
+
 class segmented:
     """
     Class implementing segmented regression.
@@ -23,43 +24,45 @@ class segmented:
     num_segments: int
         Number of segments to be modeled.
 
-    changepoints : list
-        List of changepoint specifications in patsy format.
-
-    data : Pandas Dataframe
-        Data to be modeled.
+    outcome_var : str
+        Column from self.data that represents.
 
     Methods
     -------
     set_models(models, validate=False)
         Set the segment specification(s).
-    set_changepoints(changepoints, validate=False)
-        Set the changepoint specification(s).
-    set_num_segments(num_segments, validate=False)
-        Set the number of segments.
+
     set_data(data, validate=False)
         Set the data to be modeled.
+
+    set_num_segments(num_segments, validate=False)
+        Set the number of segments.
+
     validate_parameters()
         Validate the object's current parameter values.
+
     fit()
         Estimate model parameters.
+
     summary()
         Provide information regarding the parameter estimation procedure.
     """
 
-    def __init__(self, models, changepoints=None, num_segments=None, data=None):
+    def __init__(self, models, num_segments=None, data=None):
 
         self.models = None
-        self.changepoints = None
+        self.outcome_var_name = None
+        self.outcome_var = None
+        self.predictor_var_name = None
+        self.predictor_var = None
+        self.params = None
         self.num_segments = None
         self.data = None
         self.result = None
-        self.par_x = None
 
-        self.set_models(models, validate=False)
-        self.set_changepoints(changepoints, validate=False)
-        self.set_num_segments(num_segments, validate=False)
         self.set_data(data, validate=False)
+        self.set_models(models, validate=False)
+        self.set_num_segments(num_segments, validate=False)
         self.validate_parameters()
 
     def set_data(self, data=None, validate=True):
@@ -71,15 +74,60 @@ class segmented:
 
     def set_models(self, models=None, validate=True):
 
-        self.models = models
+        if self.data is None:
+            raise ValueError(
+                "Cannot set models without valid data."
+            )
 
-        if validate:
-            # validate
-            self.validate_parameters()
+        # check first segment model
+        if "~" not in models[0]:
+            raise ValueError(
+                "Received an invalid model specification.  First entry in models must specify outcome variable."
+            )
+        else:
+            self.outcome_var_name, model0 = models[0].split("~")
+            self.outcome_var = self.data[self.outcome_var_name]
+            self.models = [model0]
 
-    def set_changepoints(self, changepoints=None, validate=True):
+        # deal with remaining model specifications
+        for spec in models[1:]:
+            if "~" in spec:
+                raise ValueError(
+                    "Received an invalid model specification.  Only the first entry in models may specify outcome variable."
+                )
+            elif "Intercept" in spec:
+                raise ValueError(
+                    "Received an invalid model specification.  Intercepts currently only permitted in the first model segment."
+                )
+            else:
+                self.models += [spec]
 
-        self.changepoints = changepoints
+        # extract data in accordance with specification
+        # extract design matrices for various model components
+        y_dmat = patsy.dmatrix(self.outcome_var, self.data)
+        x_1_dmat = patsy.dmatrix(self.models[0], self.data)
+        x_2_dmat = patsy.dmatrix(self.models[1], self.data)
+
+        # make sure there is a single predictor
+        # and no intercept (incercept is handled automatically for now)
+        if not (len(x_2_dmat.design_info.column_names) == 1):
+            raise ValueError(
+                "Received an invalid model specification.  Segments (other than the first) must omit an intercept and specify exactly one predictor variable."
+            )
+
+        # make sure predictor variable is identical across specifications
+        if (
+            not x_2_dmat.design_info.column_names[0]
+            in x_1_dmat.design_info.column_names
+        ):
+            raise ValueError(
+                "Received an invalid model specification.  Predictor variable must agree across segment specifications."
+            )
+
+        # this is the name of the column in data
+        # that represents our single predictor
+        self.predictor_var_name = x_2_dmat.design_info.column_names[0]
+        self.predictor_var = x_2_dmat[:, 0]
 
         if validate:
             # validate
@@ -102,17 +150,9 @@ class segmented:
                     "Received an invalid data object.  Data must be a pandas dataframe."
                 )
         if self.models is not None:
-            if not (isinstance(self.models, list) or isinstance(self.models, str)):
+            if not isinstance(self.models, list):
                 raise ValueError(
-                    "Received an invalid models object.  Models must be a patsy string or a list of such strings."
-                )
-        if self.changepoints is not None:
-            if not (
-                isinstance(self.changepoints, list)
-                or isinstance(self.changepoints, string)
-            ):
-                raise ValueError(
-                    "Received an invalid changepoints object.  Changepoints must be a patsy string or a list of such strings."
+                    "Received an invalid models object.  Models must be a list of patsy strings."
                 )
         if self.num_segments is not None:
             if not isinstance(self.num_segments, int):
@@ -120,114 +160,103 @@ class segmented:
                     "Received an invalid num_segments object.  Number of segments must be an integer."
                 )
 
-        # check for conflicts among self.num_segments, self.models, and self.num_segments
-        if isinstance(self.changepoints, list) and (self.num_segments is not None):
-            if len(self.changepoints) != self.num_segments - 1:
-                raise ValueError(
-                    "Number of segments implied by changepoint specification conflicts with the specified number of segments."
-                )
-        if isinstance(self.changepoints, list) and isinstance(self.models, list):
-            if len(self.changepoints) + 2 != len(self.models):
-                raise ValueError(
-                    "Number of segments implied by changepoint specification conflicts with the model specification."
-                )
+        # check for conflicts among self.num_segments and self.models
         if isinstance(self.models, list) and (self.num_segments is not None):
-            if len(self.models) + 1 != self.num_segments:
+            if len(self.models) != self.num_segments:
                 raise ValueError(
                     "Number of segments implied by model specification conflicts with the specified number of segments."
                 )
 
         # if number of segments is implied but not set, set it
         if self.num_segments is None:
-            if isinstance(self.models, list):
-                self.num_segments = len(self.models) + 1
-            elif isinstance(self.changepoints, list):
-                self.num_segments = len(self.changepoints)
-            else:
-                raise ValueError("Number of segments must be specified.")
-
-        # convert raw patsy strings to lists of patsy strings
-        #if isinstance(self.models, str):
-        #    self.models = self.num_segments * [self.models]
-        if isinstance(self.changepoints, str):
-            self.changepoints = self.num_segments * [self.changepoints]
+            self.num_segments = len(self.models)
 
     def fit(self, x0):
         def logp(params, df):
 
-            # parameters in general case
-            # b_1 ... b_n
-            # and
-            # t_2 ... t_n
-            # or
-            # g_20... g_2n
-            # g_30... g_3n
-            # g_m0... g_mn
+            y_hat = self.predict(self.data, params=params)
 
-            # parameters when n_segments = 2
-            # b_0, b_1, b_2
-            # and
-            # t_2
-            # or
-            # g_20, g_21
+            # likelihood of each observation
+            y_dmat = self.data[self.outcome_var_name]
+            error_sd = params[-1]
+            p = scipy.stats.norm.pdf(y_dmat, y_hat, error_sd)
 
-            beta_0, beta_1, beta_2, t_2, error_sd = params
-            t_1 = None
+            # log likelihood of entire data set
+            return -1 * np.sum(np.log(np.clip(p, tol, 1 - tol)))
 
-            # extract design matrices for segment #1
-            y_1_dmat, x_1_dmat = patsy.dmatrices(self.models[0], self.data)
-
-            # make sure there is a single predictor
-            # and no intercept (incercept is handled automatically)
-            if not (len(x_1_dmat.design_info.column_names) == 1):
-                raise ValueError(
-                    "Received an invalid model specification.  Model must contain exactly one predictor variable."
-                )
-
-            # extract design matrices for segment #2
-            y_2_dmat, x_2_dmat = patsy.dmatrices(self.models[1], self.data)
-
-            # make sure there is a single predictor
-            # and no intercept (incercept is handled automatically)
-            if not (len(x_2_dmat.design_info.column_names) == 1):
-                raise ValueError(
-                    "Received an invalid model specification.  Model must contain exactly one predictor variable."
-                )
-
-            # check to make sure that the predictor variable is
-            # consistent across model specifications
-            if not (
-                x_1_dmat.design_info.column_names[0]
-                == x_2_dmat.design_info.column_names[0]
-            ):
-                raise ValueError(
-                    "Received an invalid model specification.  Specification for each segment must contain same outcome variable."
-                )
-
-            # this is the name of the column in self.data
-            # that represents our single predictor
-            par_x_name = x_1_dmat.design_info.column_names[0]
-            par_x_index = x_1_dmat.design_info.column_name_indexes[par_x_name]
-
-            t_1 = x_1_dmat[par_x_index].min()
-            x_1 = x_1_dmat[0] - t_1
-            x_2 = x_2_dmat[0] - t_2
-
-            y_1 = beta_0 + beta_1 * x_1
-            y_2 = beta_2 * x_2
-
-            y_hat = np.piecewise(
-                x_1_dmat[par_x_index],
-                [x_1_dmat[par_x_index] <= t_2, x_1_dmat[par_x_index] > t_2,],
-                [y_1, y_1 + y_2],
-            )
-
-            p = scipy.stats.norm.pdf(y_1_dmat[0], y_hat, error_sd)
-            return -1 * np.sum(np.log(np.clip(p, tol, 1-tol)))
-
-        self.result = scipy.optimize.minimize(
-            logp, x0, args=(self.data,), method="Nelder-Mead", options={"maxiter": 1000}
+        # self.result = scipy.optimize.minimize(
+        #    logp, x0, args=(self.data,), method="BFGS", options={"maxiter": 1000}
+        # )
+        self.result = scipy.optimize.basinhopping(
+            logp,
+            x0,
+            minimizer_kwargs={"args": (self.data,), "method": "BFGS"},
+            niter=500,
+            T = 100,
+            stepsize = 4,
         )
+
+        self.store_parameters()
+
+        return self
+
+    def store_parameters(self):
+        # parameters when n_segments = 2
+        # b_0, b_1, b_2
+        # and
+        # t_1, t_2
+
+        # t_1, b_0, b_1
+        # t_2, b_2
+
+        self.nodes = [
+            self.predictor_var.min(),
+            self.result.lowest_optimization_result.x[0],
+        ]
+        self.betas = [
+            self.result.lowest_optimization_result.x[1],
+            self.result.lowest_optimization_result.x[2],
+            self.result.lowest_optimization_result.x[3]
+        ]
+
+        return self
+
+    def predict(self, data, params=None):
+
+        # prepare variables for model parameters
+        if self.result is None:
+            t_2, beta_0, beta_1, beta_2, error_sd = params
+            # here, we define t_1, the first node, to be the
+            # minimum of the data **passed when object was created**
+            # NOT on the data we are now using for prediction
+            t_1 = self.data[self.predictor_var_name].min()
+        else:
+            (
+                beta_0,
+                beta_1,
+                beta_2
+            ) = self.betas
+            t_1, t_2 = self.nodes
+
+        x_1 = data[self.predictor_var_name] - t_1
+        x_2 = data[self.predictor_var_name] - t_2
+
+        # !!!
+        # intercept is currently hardcoded into 1st segment
+        # and omitted form second segment
+        # !!!
+        y_1 = beta_0 + beta_1 * x_1
+        y_2 = beta_2 * x_2
+
+        y_hat = np.where(data[self.predictor_var_name] <= t_2, y_1, y_1 + y_2)
+
+        if self.result is not None:
+            print(y_1)
+            print(y_2)
+            print(t_2)
+            print(y_hat)
+
+        return y_hat
 
     def summary(self):
         # raise NotImplementedError("segmented.summary() not implemented at this time.")

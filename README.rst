@@ -18,6 +18,8 @@ Roadmap
 
   * two segments with a single, general changepoint
 
+  * models are always connected
+
   * identity link functions
 
   * single predictor
@@ -30,7 +32,17 @@ Roadmap
 
   * single predictor
 
-* >= 0.0.3
+* 0.0.3
+
+  * permit unconnected models
+
+  * two segments with a parametric changepoint
+
+  * identity link functions
+
+  * single predictor
+
+* >= 0.0.4
 
   * user-specified number of segments (>2)
 
