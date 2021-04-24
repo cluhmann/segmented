@@ -55,50 +55,6 @@ Roadmap
 Usage
 *****
 
-API revisions discussed Dec. 17, 2020:
-
-.. code-block:: python
-
-    # force users to specify patsy strings for ALL segments
-    # (as below)
-
-    model = sgmt.segment(['y~1+x', '~0+x', '~1+x'], num_segments=3, data=data)
-
-    # now try one where all the segments are the same,
-    # except for the first which requires an intercept
-    # require all segments to be connected but now we can
-    # drop the num_segments argument
-    # can we more compactly specify all the strings,
-    # when we have identically specified segments? Yes!
-
-    model = sgmt.segment(['y~1+x'] + 2 * ['~0+x'], data=data)
-
-    # so here would be how you specify a fully
-    # connected 10-segment model
-    model = sgmt.segment(['y~1+x'] + 9 * ['~0+x'], data=data)
-
-API revisions discussed Dec. 14, 2020:
-
-.. code-block:: python
-
-    # Alternative #1
-    # Estimate initial intercept, 3 slopes. Ensure that segment #2 is
-    # connected to segment#1 (segment 2's "intercept" is contrained such
-    # that segments connect).  Allow segment #3 to potentially be disconnected
-    # at T_3 (estimate a traditional intercept for segment #3)
-
-    model = sgmt.segment(['y~1+x', 'y~0+x', 'y~1+x'], num_segments=3, data=data)
-
-    # Alternative #2
-    # Same as above, but here we provide intercept-like terms and slope-like
-    # terms separately.    
-
-    model = sgmt.segment(intcpt=['y~1', 'y~0'], sgmts=['~x', '~x'], num_segments=2, data=data)
-
-
-
-Current state of the API:
-
 .. code-block:: python
 
     import segmented as sgmt
@@ -130,11 +86,24 @@ First, we explicitly omit an intercept from these specifications by including th
 
 Second, we have omitted the outcome variable (i.e., :code:`y`) from the left-hand side of the formula. This is because, unlike the intercept-like term, the segment definitions **do not** describe the relationship between the outcome variable and the predictor within that given segment (at least not in a straightforward sense).  Instead, the segment definition describes how we wish the *difference* between the current segment and the previous segment to be modeled.  Each of the segment definitions we have provided here suggests that the change occurring at the preceding node can be described by a simple change in (linear) slope (as a function of :code:`data['x']`).  Thus, for each segment, there will be a single slope (coefficient) estimated for each segment: :math:`\beta_1` for the first segment and :math:`\beta_2` for the second segment.  The first segment will work much like conventional linear regression: :math:`y=\beta_0+\beta_1 (x - T_1)`.  However, in the second segment, :math:`y=\beta_0 + \beta_1 (x - T_1) + \beta_2 (x - T_2)`.
 
+Requiring a user to provide all the specifications may seem excessive, particularly when the user wishes to use the same specification for all segments.  However, it's easy enough to compactly specify a large number of segments.
+
+.. code-block:: python
+
+    # 3 segments, 2 changepoints
+    model = sgmt.segment(['y~1+x', '0+x', '0+x'], data=data)
+
+    # can we more compactly specify all the strings,
+    # when we have identically specified segments? Yes!
+    model = sgmt.segment(['y~1+x'] + 2 * ['0+x'], data=data)
+
+    # so here would be how you specify a 10-segment model
+    model = sgmt.segment(['y~1+x'] + 9 * ['0+x'], data=data)
 
 
 
 
-Older versions of API:
+Older API proposals:
 
 .. code-block:: python
 
@@ -163,7 +132,7 @@ Older versions of API:
     print(model.summary())
 
 
-OR
+Another:
 
 .. code-block:: python
 
