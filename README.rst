@@ -76,7 +76,7 @@ Let's look at what we have here.  We first read some data into a pandas datafram
 Model Specification
 *******************
 
-The first argument to :code:`segment()` is a list of formulas that describe our model.  This is always the first argument.  The second, named argument is the data we are modeling.  The model we have defined here has two segments, so we specify 3 components.  We are likely to be most interested in the location of the node connecting the two segments, :math:`T_2`.  We also posit an additional node at :math:`x=min(x)` that we will call :math:`T_1`.
+The first argument to :code:`segment()` is a list of formulas that describe our model.  This is always the first argument.  The second, named argument explicitly states how many segments are included in the model.  This argument is optional (and may be removed from the API at some point in the future).  The third, named argument is the data we are modeling.  The model we have defined here has two segments, so we specify 3 components.  We are likely to be most interested in the location of the node connecting the two segments, :math:`T_2`.  We also posit an additional node at :math:`x=min(x)` that we will call :math:`T_1`.
 
 The first formula specifies an intercept-like term and provides 2 important pieces of information about our model.  First, it instructs :code:`segment` to treat :code:`data['y']` as our outcome variable.  Second, it indicates that an intercept-like term will be estimated (cf. :code:`'y~0'`).  Specifically, we will estimate an offset, :math:`\beta_0` such that :math:`y = f(T_1) = f(min(x)) = \beta_0`.
 
@@ -84,7 +84,7 @@ The next two elements in the definition list describe the two segments and are a
 
 First, we explicitly omit an intercept from these specifications by including the :code:`0` in :code:`'~0+x'`.  This means that :code:`segment()` will attempt to construct a series of *connected* segments (constraining each segment to meet adjacent segments at nodes).  If we had instead included an intercept in these segment definitions (e.g., :code:`'~1+x'` or, more implicitly, :code:`'~x'`), we would instead permit the model to construct a *disconnected* model in which the segments need not meet at each node.
 
-Second, we have omitted the outcome variable (i.e., :code:`y`) from the left-hand side of the formula. This is because, unlike the intercept-like term, the segment definitions **do not** describe the relationship between the outcome variable and the predictor within that given segment (at least not in a straightforward sense).  Instead, the segment definition describes how we wish the *difference* between the current segment and the previous segment to be modeled.  Each of the segment definitions we have provided here suggests that the change occurring at the preceding node can be described by a simple change in (linear) slope (as a function of :code:`data['x']`).  Thus, for each segment, there will be a single slope (coefficient) estimated for each segment: :math:`\beta_1` for the first segment and :math:`\beta_2` for the second segment.  The first segment will work much like conventional linear regression: :math:`y=\beta_0+\beta_1 (x - T_1)`.  However, in the second segment, :math:`y=\beta_0 + \beta_1 (x - T_1) + \beta_2 (x - T_2)`.
+Second, we have omitted the outcome variable (i.e., :code:`y`) from the left-hand side of these specifications. This is because, unlike the intercept-like term, the segment definitions **do not** describe the relationship between the outcome variable and the predictor within that given segment (at least not in a straightforward sense).  Instead, the segment definition describes how we wish the *difference* between the current segment and the previous segment to be modeled.  Each of the segment definitions we have provided here suggests that the change occurring at the preceding node can be described by a simple change in (linear) slope (as a function of :code:`data['x']`).  Thus, for each segment, there will be a single slope (coefficient) estimated for each segment: :math:`\beta_1` for the first segment and :math:`\beta_2` for the second segment.  The first segment will work much like conventional linear regression: :math:`y=\beta_0+\beta_1 (x - T_1)`.  However, in the second segment, :math:`y=\beta_0 + \beta_1 (x - T_1) + \beta_2 (x - T_2)`.
 
 Requiring a user to provide all the specifications may seem excessive, particularly when the user wishes to use the same specification for all segments.  However, it's easy enough to compactly specify a large number of segments.
 
@@ -98,7 +98,7 @@ Requiring a user to provide all the specifications may seem excessive, particula
     model = sgmt.segment(['y~1+x'] + 2 * ['0+x'], data=data)
 
     # so here would be how you specify a 10-segment model
-    model = sgmt.segment(['y~1+x'] + 9 * ['0+x'], data=data)
+    model = sgmt.segment(['y~1+x'] + 10 * ['0+x'], data=data)
 
 
 
