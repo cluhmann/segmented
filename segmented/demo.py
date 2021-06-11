@@ -1,11 +1,10 @@
 import numpy as np
 import pandas as pd
-import patsy
 import scipy.stats
 import scipy.optimize
 
 
-class simple:
+class demo:
     def __init__(self, data=None, par_y='y', par_x='x', par_z='z'):
 
         self.par_y = par_y
@@ -47,20 +46,23 @@ class simple:
         # need to set the stepsize more intelligently
         # but that requires scaling the parameters
         # !!!!!!!!!!!!!!!!!!!!!!!!!!!!
-        elif x0 is not None:
-            self.result = scipy.optimize.basinhopping(
-                self.model_logp,
-                x0,
-                minimizer_kwargs={'args':(self.data,)},
-                niter=100,
-            )
+        #elif x0 is not None:
+        #    self.result = scipy.optimize.basinhopping(
+        #        self.model_logp,
+        #        x0,
+        #        minimizer_kwargs={'args':(self.data,)},
+        #        niter=100,
+        #    )
         else:
             raise ValueError(
-                "fit() requires x0 or bounds"
+                #"fit() requires x0 or bounds"
+                "fit() requires bounds"
             )
 
+
     def summary(self):
-        print(self.result)
+        return self.result
+
 
     def change_point(self, params, data, mean=False):
         intercept = params[3]

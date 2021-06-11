@@ -48,21 +48,25 @@ class segmented:
         Provide information regarding the parameter estimation procedure.
     """
 
-    def __init__(self, models, num_segments=None, data=None):
+    def __init__(self, models, changepoints=None, data=None):
+
+        self.num_segments = None
+        self.data = None
 
         self.models = None
         self.outcome_var_name = None
         self.outcome_var = None
         self.predictor_var_name = None
         self.predictor_var = None
-        self.params = None
-        self.num_segments = None
-        self.data = None
+
+        self.nodes = None
+        self.betas = None
         self.result = None
 
+        # data must be set before models
         self.set_data(data, validate=False)
         self.set_models(models, validate=False)
-        self.set_num_segments(num_segments, validate=False)
+        self.set_changepoints(changepoints, validate=False)
         self.validate_parameters()
 
     def set_data(self, data=None, validate=True):
@@ -133,6 +137,33 @@ class segmented:
             # validate
             self.validate_parameters()
 
+    def set_changepoints(self, changepoints, validate=True):
+        if changepoints is None:
+            self.changepoints = None
+            return
+
+        if not(len(changepoints) == 1):
+            raise ValueError(
+                "Only a single changepoint can be modeled currently."
+            )
+        if self.data is None:
+            raise ValueError(
+                "Cannot set changepoints without valid data."
+            )
+        if "~" in spec:
+            raise ValueError(
+                "Received an invalid changepoint specification.  Changepoints may not specify an outcome variable."
+            )
+        cp_dmat = patsy.dmatrix(changepoints[0], self.data)
+        # this is the name of the column in data that
+        # represents our single covariate (changepoint predictor)
+        self.changepoint_predictor_var_name = cp_dmat.design_info.column_names[0]
+        self.changepoint_predictor_var = cp_dmat[:, 0]
+
+        if validate:
+            # validate
+            self.validate_parameters()
+
     def set_num_segments(self, num_segments, validate=True):
 
         self.num_segments = num_segments
@@ -154,6 +185,11 @@ class segmented:
                 raise ValueError(
                     "Received an invalid models object.  Models must be a list of patsy strings."
                 )
+        if self.changepoints is not None:
+            if not isinstance(self.changepoints, list):
+                raise ValueError(
+                    "Received an invalid changepoints object.  Changepoints must be a list of patsy strings."
+                )
         if self.num_segments is not None:
             if not isinstance(self.num_segments, int):
                 raise ValueError(
@@ -165,6 +201,16 @@ class segmented:
             if len(self.models) != self.num_segments:
                 raise ValueError(
                     "Number of segments implied by model specification conflicts with the specified number of segments."
+                )
+        if isinstance(self.changepoints, list) and (self.num_segments is not None):
+            if len(self.changepoints) != self.num_segments:
+                raise ValueError(
+                    "Number of segments implied by changepoint specification conflicts with the specified number of segments."
+                )
+        if isinstance(self.changepoints, list) and isinstance(self.models, list):
+            if len(self.changepoints) != len(self.models):
+                raise ValueError(
+                    "Number of segments implied by changepoint specification conflicts with the number implied y the model specification."
                 )
 
         # if number of segments is implied but not set, set it
