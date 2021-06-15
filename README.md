@@ -1,3 +1,5 @@
+## segmented
+
 segmented is a Python toolbox for performing segmented regression, with an initial focus on parametrically characterizing the location of nodes (i.e., changepoints, knots, etc.).
 
 The current state of the package is primarily for demonstration and replication purposes.  The primary functionality current resides in the `segmented.demo` object.  This object embodies a segmented regression model with parametric node placement.  The  specification of both the segmented regression model itself and the specification of the parametric node placement are log-linear with Poisson error structures.  The `segmented.demo` object also assumes a single node (i.e., two segments). Future versions of the package will relax these assumptions, permitting variable numbers of segments/nodes, alternative link functions, and more.
