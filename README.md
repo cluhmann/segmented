@@ -1,16 +1,20 @@
-segmented is a Python toolbox for performing segmented regression, with an initial focus on permitting the location of nodes (i.e., changepoints, knots, etc.) to be parametrically characterized.
+segmented is a Python toolbox for performing segmented regression, with an initial focus on parametrically characterizing the location of nodes (i.e., changepoints, knots, etc.).
+
+The current state of the package is primarily for demonstration and replication purposes.  The primary functionality current resides in the `segmented.demo` object.  This object embodies a segmented regression model with parametric node placement.  The  specification of both the segmented regression model itself and the specification of the parametric node placement are log-linear with Poisson error structures.  The `segmented.demo` object also assumes a single node (i.e., two segments). Future versions of the package will relax these assumptions, permitting variable numbers of segments/nodes, alternative link functions, and more.
 
 ## Installation
 
 segmented is written for Python 3.7+.  The latest release of segmented can be installed from PyPI using pip:
 
-`pip install segmented`
+```
+pip install segmented
+```
 
 
 ## Example
 
 
-In the following example, we assume the following initial steps
+In the following example, we assume the following initial imports (which are, coincidentally, the packages required by segmented):
 
 ```python
 import pandas as pd
@@ -48,7 +52,7 @@ y_mean = np.exp(
 data['y'] = scipy.stats.poisson.rvs(y_mean)
 ```
 
-Here, we have generated data reflecting 2 segments separated by a single node.  This node is parametric; its location is dependent on `data['z']`.  Now that we have our data, let's get to the good stuff and fit our model.
+Here, we have generated data reflecting 2 segments separated by a single node.  This node is parametric: its location is dependent on `data['z']`.  Now that we have our data, let's construct and fit our model.
 
 ```python
 # construct model
@@ -58,7 +62,7 @@ model = segmented.demo(data=data)
 model.fit(bounds=[(-5,5), (-.05,.05), (-.05,.05), (-5,5), (-.05,.05)])
 ```
 
-Here, we initialize the demonstration model by passing our data.  We then call `fit()` to begin the estimation/optimization process, providing bounds to constrain the parameter values considered.  Once this function call returns, we can unpack our results and see what happened.
+Here, we initialize the demonstration model by passing in our data to the initialization.  We then call `fit()` to begin the estimation/optimization process, providing bounds to constrain the parameter values considered.  Once this function call returns, we can unpack our results and see what happened.
 
 ```python
 # print summary of optimization
@@ -70,7 +74,3 @@ for i,j in zip(b+g, model.result.x):
 ```
 
 Currently, `summary()` returns a `scipy.optimize.OptimizeResult` object.
-
-## Caveats and Future Directions
-
-The current state of the package is primarily for demonstration and replication purposes.  The primary functionality current resides in the  object.  This object embodies a segmented regression model with parametric node placement.  The  specification of both the segmented regression model itself and the specification of the parametric node placement are log-linear with Poisson error structures.  The `segmented.demo()` object also only permits a single node (i.e., two segments). Future version of the package will relax these assumptions, permitting alternative link functions and more flexible model specifications.

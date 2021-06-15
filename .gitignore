@@ -1,6 +1,7 @@
+*.py
+ROADMAP.md
 references.txt
-test-simple.py
-test-parametric.py
+
 
 # Byte-compiled / optimized / DLL files
 __pycache__/
