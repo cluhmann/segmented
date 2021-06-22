@@ -7,7 +7,7 @@ import scipy.optimize
 class demo:
     """This class is used for illustrative and replication purposes.  This object embodies a segmented regression model with parametric node placement.  The  specification of both the segmented regression model itself and the specification of the parametric node placement are log-linear with Poisson error structures and assumes a single node (i.e., two segments):
 
-    Y = exp(B_0 + (B_1 * X) + (B_2 * (X - exp(g_0 + (g_1 * Z)))))
+    mu_Y = exp(B_0 + (B_1 * X) + (B_2 * (X - exp(g_0 + (g_1 * Z)))))
 
     This specification has five parameters: B_0, B_1, B_2, g_1, and g_2.  B_0 is the intercept, B_1 is the slope of the first segment, B_2 is the change in slope occuring at the node.  The placement of the node is parametric, with its specification including an intercept, g_0, and a slope, g_1, relating Z and node placement.
 

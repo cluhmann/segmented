@@ -1,3 +1,5 @@
+import warnings 
+
 import numpy as np
 import pandas as pd
 import scipy.optimize
@@ -60,7 +62,7 @@ class segmented:
         self.predictor_var = None
 
         self.nodes = None
-        self.betas = None
+        self.coefs = None
         self.result = None
 
         # data must be set before models
@@ -106,6 +108,11 @@ class segmented:
             else:
                 self.models += [spec]
 
+        if len(self.models) > 2:
+            raise NotImplementedError(
+                    'segmented currently supports a maximum of 2 segments'
+            )
+
         # extract data in accordance with specification
         # extract design matrices for various model components
         y_dmat = patsy.dmatrix(self.outcome_var, self.data)
@@ -138,27 +145,39 @@ class segmented:
             self.validate_parameters()
 
     def set_changepoints(self, changepoints, validate=True):
+        self.nodes_parametric = False
+
         if changepoints is None:
-            self.changepoints = None
+            self.nodes = None
             return
 
-        if not(len(changepoints) == 1):
-            raise ValueError(
-                "Only a single changepoint can be modeled currently."
-            )
-        if self.data is None:
-            raise ValueError(
-                "Cannot set changepoints without valid data."
-            )
-        if "~" in spec:
-            raise ValueError(
-                "Received an invalid changepoint specification.  Changepoints may not specify an outcome variable."
-            )
-        cp_dmat = patsy.dmatrix(changepoints[0], self.data)
-        # this is the name of the column in data that
-        # represents our single covariate (changepoint predictor)
-        self.changepoint_predictor_var_name = cp_dmat.design_info.column_names[0]
-        self.changepoint_predictor_var = cp_dmat[:, 0]
+        # if we have received a list
+        if isinstance(changepoints, list):
+
+            # if we have received parametric node placement specifications
+            if isinstance(changepoints[0], str):
+                self.nodes_parametric = True
+                raise ValueError(
+                    "Parametric node placement is not currently supported."
+                )
+                if not(len(changepoints) == 1):
+                    raise ValueError(
+                        "Only a single changepoint can be modeled currently."
+                    )
+
+                if "~" in changepoints:
+                    raise ValueError(
+                        "Received an invalid changepoint specification.  Changepoints may not specify an outcome variable."
+                    )
+                if self.data is None:
+                    raise ValueError(
+                        "Cannot set changepoints without valid data."
+                    )
+                cp_dmat = patsy.dmatrix(changepoints[0], self.data)
+                # this is the name of the column in data that
+                # represents our single covariate (changepoint predictor)
+                self.node_predictor_var_name = cp_dmat.design_info.column_names[0]
+                self.node_predictor_var = cp_dmat[:, 0]
 
         if validate:
             # validate
@@ -185,10 +204,10 @@ class segmented:
                 raise ValueError(
                     "Received an invalid models object.  Models must be a list of patsy strings."
                 )
-        if self.changepoints is not None:
-            if not isinstance(self.changepoints, list):
+        if self.nodes is not None:
+            if not isinstance(self.nodes, list):
                 raise ValueError(
-                    "Received an invalid changepoints object.  Changepoints must be a list of patsy strings."
+                    "Received an invalid changepoints object.  Changepoints must be a list of initial guesses or patsy strings."
                 )
         if self.num_segments is not None:
             if not isinstance(self.num_segments, int):
@@ -202,13 +221,13 @@ class segmented:
                 raise ValueError(
                     "Number of segments implied by model specification conflicts with the specified number of segments."
                 )
-        if isinstance(self.changepoints, list) and (self.num_segments is not None):
-            if len(self.changepoints) != self.num_segments:
+        if isinstance(self.nodes, list) and (self.num_segments is not None):
+            if len(self.nodes) != self.num_segments:
                 raise ValueError(
                     "Number of segments implied by changepoint specification conflicts with the specified number of segments."
                 )
-        if isinstance(self.changepoints, list) and isinstance(self.models, list):
-            if len(self.changepoints) != len(self.models):
+        if isinstance(self.nodes, list) and isinstance(self.models, list):
+            if len(self.nodes) != len(self.models):
                 raise ValueError(
                     "Number of segments implied by changepoint specification conflicts with the number implied y the model specification."
                 )
@@ -217,7 +236,49 @@ class segmented:
         if self.num_segments is None:
             self.num_segments = len(self.models)
 
-    def fit(self, x0):
+    def fit(self, guesses):
+
+        if self.nodes_parametric:
+            self._fit_parametric(guesses)
+        else:
+            self._fit_nonparametric(guesses)
+
+    def _fit_nonparametric(self, changepoints):
+
+        assert(len(changepoints) == (self.num_segments-1) )
+
+        x = self.predictor_var
+        y = self.outcome_var
+
+        # this is based on the method described in
+        # Muggeo (2003, Statist. Med.)
+        threshold = .00001 * np.min(np.diff(x))
+        converged = False
+        while not converged:
+            U = [np.clip(x - changepoints[0], 0, None)]
+            V = [(x - changepoints[0]) > 0]
+            for changepoint in changepoints[1:]:
+                U += [np.clip(x - changepoint, 0, None)]
+                V += [(x - changepoint) > 0]
+
+            predictors = np.array([np.ones_like(x), x] + U + V)
+
+            result = np.linalg.lstsq(predictors.transpose(), y, rcond=None)
+            beta = result[0][2:2+len(changepoints)]
+            gamma = result[0][2+len(changepoints):]
+            changepoints = changepoints - (gamma/beta)
+
+            converged = np.abs(np.max(gamma)) < threshold
+
+        # save results
+        # should probably augment the result to add the degenerate
+        # initial node at min(x)
+        self.nodes = changepoints
+        self.coefs = result[0][0:2]
+
+
+    def _fit_parametric(self, x0):
+        warnings.warn('WARNING: segmented.fit() running with unvalidated parameter guesses (x0).', RuntimeWarning)
         def logp(params, df):
 
             y_hat = self.predict(self.data, params=params)
@@ -240,48 +301,42 @@ class segmented:
             niter=500,
             T = 100,
             stepsize = 4,
-        )
+        ).lowest_optimization_result
 
-        self.store_parameters()
-
-        return self
-
-    def store_parameters(self):
-        # parameters when n_segments = 2
-        # b_0, b_1, b_2
-        # and
-        # t_1, t_2
-
-        # t_1, b_0, b_1
-        # t_2, b_2
-
+        # save results
         self.nodes = [
             self.predictor_var.min(),
-            self.result.lowest_optimization_result.x[0],
+            self.result.x[0],
         ]
-        self.betas = [
-            self.result.lowest_optimization_result.x[1],
-            self.result.lowest_optimization_result.x[2],
-            self.result.lowest_optimization_result.x[3]
+        self.coefs = [
+            self.result.x[1],
+            self.result.x[2],
+            self.result.x[3]
         ]
 
         return self
 
     def predict(self, data, params=None):
 
-        # prepare variables for model parameters
-        if self.result is None:
+        # we got parameter values, but already results in self.result
+        # warn user and use the parameter values that were passed in
+        if (self.result is not None) and (params is not None) and (not np.array_equal(self.result, params, equal_nan=True)):
+            warnings.warn('WARNING: segmented.predict() was previously fit, but received parameter values. Using parameter values passed to predict().', RuntimeWarning)
+        # use the parameter values that were passed in
+        if params is not None:
             t_2, beta_0, beta_1, beta_2, error_sd = params
             # here, we define t_1, the first node, to be the
             # minimum of the data **passed when object was created**
             # NOT on the data we are now using for prediction
+            # otherwise, the other parameter values make no sense
             t_1 = self.data[self.predictor_var_name].min()
         else:
+            # extract parameter values from self
             (
                 beta_0,
                 beta_1,
                 beta_2
-            ) = self.betas
+            ) = self.coefs
             t_1, t_2 = self.nodes
 
         x_1 = data[self.predictor_var_name] - t_1
@@ -303,6 +358,7 @@ class segmented:
             print(y_hat)
 
         return y_hat
+
 
     def summary(self):
         # raise NotImplementedError("segmented.summary() not implemented at this time.")
