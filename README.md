@@ -18,7 +18,7 @@ pip install segmented
 ## Demo
 
 
-In the following example, we assume the following initial imports.  These are, coincidentally, the packages required by the segmented:
+In the following example, we assume the following initial imports.  These are, coincidentally, the packages required by segmented:
 
 ```python
 import pandas as pd
