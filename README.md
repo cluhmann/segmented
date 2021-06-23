@@ -2,7 +2,7 @@
 
 segmented is a Python toolbox for performing segmented regression, with an initial focus on parametrically characterizing the location of nodes (i.e., changepoints, knots, etc.).
 
-The current state of the package is primarily for demonstration and replication purposes.  The primary functionality current resides in the `segmented.demo` object.  This object embodies a segmented regression model with parametric node placement.  The  specification of both the segmented regression model itself and the specification of the parametric node placement are log-linear with Poisson error structures.  The `segmented.demo` object also assumes a single node (i.e., two segments). Future versions of the package will relax these assumptions, permitting variable numbers of segments/nodes, alternative link functions, and more.
+The current state of the package is primarily for demonstration and replication purposes.  The primary functionality current resides in the `segmented.demo` class.  This class embodies a segmented regression model with parametric node placement.  The  specification of both the segmented regression model itself and the specification of the parametric node placement are log-linear with Poisson error structures.  The `segmented.demo` class also assumes a single node (i.e., two segments). Future versions of the package will relax these assumptions, permitting variable numbers of segments/nodes, alternative link functions, and more.
 
 ## Installation
 
@@ -16,7 +16,7 @@ pip install segmented
 ## Example
 
 
-In the following example, we assume the following initial imports (which are, coincidentally, the packages required by segmented):
+In the following example, we assume the following initial imports.  These are, coincidentally, the packages required by the segmented:
 
 ```python
 import pandas as pd
@@ -24,7 +24,6 @@ import numpy as np
 import scipy.stats
 
 import segmented
-
 ```
 
 Let's generate some synthetic data to use for estimation.

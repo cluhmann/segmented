@@ -80,7 +80,8 @@ class segmented:
 
     def set_models(self, models=None, validate=True):
 
-        if self.data is None:
+        # we need valid data to parse the models
+        if not isinstance(self.data, pd.DataFrame):
             raise ValueError(
                 "Cannot set models without valid data."
             )
@@ -101,10 +102,6 @@ class segmented:
                 raise ValueError(
                     "Received an invalid model specification.  Only the first entry in models may specify outcome variable."
                 )
-            elif "Intercept" in spec:
-                raise ValueError(
-                    "Received an invalid model specification.  Intercepts currently only permitted in the first model segment."
-                )
             else:
                 self.models += [spec]
 
@@ -119,6 +116,11 @@ class segmented:
         x_1_dmat = patsy.dmatrix(self.models[0], self.data)
         x_2_dmat = patsy.dmatrix(self.models[1], self.data)
 
+        # make sure there is an intercept in the first segment
+        if "Intercept" not in x_1_dmat.design_info.column_names:
+            raise ValueError(
+                "Received an invalid model specification.  Intercepts currently required in the first model segment."
+            )
         # make sure there is a single predictor
         # and no intercept (incercept is handled automatically for now)
         if not (len(x_2_dmat.design_info.column_names) == 1):
@@ -271,10 +273,10 @@ class segmented:
             converged = np.abs(np.max(gamma)) < threshold
 
         # save results
-        # should probably augment the result to add the degenerate
-        # initial node at min(x)
-        self.nodes = changepoints
-        self.coefs = result[0][0:2]
+        self.nodes = [x.min(), changepoints[:]]
+        self.coefs = result[0][0:2+len(changepoints)]
+        # augment result so that initial node is at x=min(x)
+        self.coefs[0] = self.coefs[0] + (self.coefs[1] * x.min())
 
 
     def _fit_parametric(self, x0):

@@ -26,7 +26,7 @@ with open(VERSION_FILE) as buff:
 if len(set(("test", "easy_install")).intersection(sys.argv)) > 0:
     import setuptools
 
-tests_require=['nose']
+tests_require=['pytest']
 extra_setuptools_args = {}
 
 setup(
