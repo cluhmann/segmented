@@ -81,7 +81,7 @@ Currently, `summary()` returns a `scipy.optimize.OptimizeResult` object.
 
 ## Segmented class
 
-Here is a quick example of the `segmented.segmented` class.
+Here, we briefly outline the functionality of the `segmented.segmented` class.  This class is intended to be the workhorse class of the segmented package.
 
 ```python
 data = pd.read_csv('mydata.csv')
