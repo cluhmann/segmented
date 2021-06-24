@@ -90,10 +90,7 @@ import pandas as pd
 data = pd.read_csv('mydata.csv')
 
 # construct a 2 segment model
-model = sgmt.segment(['y~1', '~0+x'], data=data)
-
-# construct a 2 segment model
-model = sgmt.segment(['y~1', '~0+x', '~0+x'], num_segments=2, data=data)
+model = sgmt.segment(['y~1+x', '~0+x'], data=data)
 
 # do inference
 model.fit()
@@ -107,7 +104,7 @@ Let's look at what we have here.  We first read some data into a pandas datafram
 
 The first argument to `segmented.segmented()` is a list of formulas that describe our model.  This is always the first argument.  The second, named argument is the data we are modeling.  We have provided 2 segment specification and we are likely very interested in the location of the node connecting the two segments, T2.  We also posit an additional node at x=min(x) that we will call T1.
 
-The first formula specifies an intercept-like term and provides 2 important pieces of information about our model.  First, it instructs `segment` to treat `data['y']` as our outcome variable.  Second, it indicates that an intercept-like term will be estimated (cf. `'y~0'`).  Specifically, we will estimate an offset, `\beta_0` such that `y = f(T_1) = f(min(x)) = \beta_0`.
+The first formula specifies an intercept-like term and provides 2 important pieces of information about our model.  First, it instructs `segment` to treat `data['y']` as our outcome variable.  Second, it indicates that an intercept-like term will be estimated (cf. `'y~0'`).  Specifically, we will estimate an offset, beta0 such that y = f(T1) = f(min(x)) = beta0.
 
 The next two elements in the definition list describe the two segments and are a bit different.  There are two details in particular that are worth highlighting.
 
