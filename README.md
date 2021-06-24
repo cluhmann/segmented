@@ -25,7 +25,7 @@ import pandas as pd
 import numpy as np
 import scipy.stats
 
-import segmented
+import segmented as sgmt
 ```
 
 Let's generate some synthetic data to use for estimation.
@@ -59,7 +59,7 @@ Here, we have generated data reflecting 2 segments separated by a single node.  
 
 ```python
 # construct model
-model = segmented.demo(data=data)
+model = sgmt.demo(data=data)
 
 # fit parametric node placement segmented regression model
 model.fit(bounds=[(-5,5), (-.05,.05), (-.05,.05), (-5,5), (-.05,.05)])
@@ -84,9 +84,6 @@ Currently, `summary()` returns a `scipy.optimize.OptimizeResult` object.
 Here is a quick example of the `segmented.segmented` class.
 
 ```python
-import segmented as sgmt
-import pandas as pd
-
 data = pd.read_csv('mydata.csv')
 
 # construct a 2 segment model
@@ -100,15 +97,15 @@ print(model.summary())
 
 ```
 
-Let's look at what we have here.  We first read some data into a pandas dataframe.  We then construct our model by calling `sgmt.segment()` and passing it a list of `patsy <https://github.com/pydata/patsy>`_ formulas.  We then use our data to estimate the parameters of our model.  Finally, we inspect the results.  Let's take a closer look at the model specification step.
+Let's look at what we have here.  We first read some data into a pandas dataframe.  We then construct our model by calling `sgmt.segment()` and passing it a list of [patsy](https://github.com/pydata/patsy) formulas.  We then use our data to estimate the parameters of our model.  Finally, we inspect the results.  Let's take a closer look at the model specification step.
 
-The first argument to `segmented.segmented()` is a list of formulas that describe our model.  This is always the first argument.  The second, named argument is the data we are modeling.  We have provided 2 segment specification and we are likely very interested in the location of the node connecting the two segments, T2.  We also posit an additional node at x=min(x) that we will call T1.
+The first argument to `sgmt.segmented()` is a list of formulas that describe our model.  This is always the first argument.  The second, named argument is the data we are modeling.  We have provided 2 segment specification and we are likely very interested in the location of the node connecting the two segments, T2.  We also posit an additional node at x=min(x) that we will call T1.
 
-The first formula specifies an intercept-like term and provides 2 important pieces of information about our model.  First, it instructs `segment` to treat `data['y']` as our outcome variable.  Second, it indicates that an intercept-like term will be estimated (cf. `'y~0'`).  Specifically, we will estimate an offset, beta0 such that y = f(T1) = f(min(x)) = beta0.
+The first formula specifies an intercept-like term and provides 2 important pieces of information about our model.  First, it instructs `segment` to treat `data['y']` as our outcome variable.  Second, it indicates that an intercept-like term will be estimated (cf. `'y~0+x'`).  Specifically, we will estimate an offset, beta0 such that y = f(T1) = f(min(x)) = beta0.
 
 The next two elements in the definition list describe the two segments and are a bit different.  There are two details in particular that are worth highlighting.
 
-First, we explicitly omit an intercept from these specifications by including the `0` in `'~0+x'`.  This means that `segment()` will attempt to construct a series of *connected* segments (constraining each segment to meet adjacent segments at nodes).  If we had instead included an intercept in these segment definitions (e.g., `'~1+x'` or, more implicitly, `'~x'`), we would instead permit the model to construct a *disconnected* model in which the segments need not meet at each node.
+First, we explicitly omit an intercept from these specifications by including the `0` in `'~0+x'`.  This means that `segment()` will attempt to construct *connected* segments (constraining each segment to meet at nodes).  If we had instead included an intercept in these segment definitions (e.g., `'~1+x'` or, more implicitly, `'~x'`), we would instead permit the model to construct a *disconnected* model in which the segments need not meet at each node.
 
-Second, we have omitted the outcome variable (i.e., `y`) from the left-hand side of the formula. This is because, unlike the intercept-like term, the segment definitions **do not** describe the relationship between the outcome variable and the predictor within that given segment (at least not in a straightforward sense).  Instead, the segment definition describes how we wish the *difference* between the current segment and the previous segment to be modeled.  Each of the segment definitions we have provided here suggests that the change occurring at the preceding node can be described by a simple change in (linear) slope (as a function of `data['x']`).  Thus, for each segment, there will be a single slope (coefficient) estimated for each segment: beta1 for the first segment and beta2 for the second segment.  The first segment will work much like conventional linear regression: y=beta0+beta1 (x - T1).  However, in the second segment, y=beta0 + beta1 (x - T1) + beta2 (x - T2).
+Second, we have omitted the outcome variable (i.e., `y`) from the left-hand side of the second segment's formula. This is because, unlike the first segment's definition, the segment definitions **do not** describe the relationship between the outcome variable and the predictor within that given segment (at least not in a straightforward sense).  Instead, the segment definition describes how we wish the *difference* between the current segment and the previous segment to be modeled.  Each of the segment definitions we have provided here suggests that the change occurring at the preceding node can be described by a simple change in (linear) slope (as a function of `data['x']`).  Thus, for each segment, there will be a single slope (coefficient) estimated for each segment: beta1 for the first segment and beta2 for the second segment.  The first segment will work much like conventional linear regression: y=beta0+beta1 (x - T1).  However, in the second segment, y=beta0 + beta1 (x - T1) + beta2 (x - T2).
 
