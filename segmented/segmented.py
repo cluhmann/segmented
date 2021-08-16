@@ -57,9 +57,6 @@ class segmented:
 
         self.models = None
         self.outcome_var_name = None
-        self.outcome_var = None
-        self.predictor_var_name = None
-        self.predictor_var = None
 
         self.nodes = None
         self.coefs = None
@@ -80,6 +77,11 @@ class segmented:
 
     def set_models(self, models=None, validate=True):
 
+        if len(models) > 2:
+            raise NotImplementedError(
+                    'segmented currently supports a maximum of 2 segments'
+            )
+
         # we need valid data to parse the models
         if not isinstance(self.data, pd.DataFrame):
             raise ValueError(
@@ -91,56 +93,52 @@ class segmented:
             raise ValueError(
                 "Received an invalid model specification.  First entry in models must specify outcome variable."
             )
-        else:
-            self.outcome_var_name, model0 = models[0].split("~")
-            self.outcome_var = self.data[self.outcome_var_name]
-            self.models = [model0]
+
+        # deal with first model specification
+        # extract outcome (to the left of "~")
+        self.outcome_var_name, model0 = models[0].split("~")
+        # here we need to explicitly exclude an intercept to just grab
+        # the outcome column
+        self.outcome_dmatrix = patsy.dmatrix('0+' + self.outcome_var_name, self.data)
+
+        # extract first segment specification (to the right of "~")
+        self.segment_specifications = [model0]
+        self.segment_dmatrices = [patsy.dmatrix(model0, self.data)]
+
+        # make sure there is an intercept in the first segment
+        if "Intercept" not in self.segment_dmatrices[0].design_info.column_names:
+            raise ValueError(
+                "Received an invalid model specification.  Intercepts currently required in the first model segment."
+            )
+
+        # make sure there is an intercept in the first segment
+        if not (self.segment_dmatrices[0].shape[1] == 2):
+            raise ValueError(
+                "Received an invalid model specification.  First model segment must include only a single predictor."
+            )
 
         # deal with remaining model specifications
+        predictor_name = list(set(self.segment_dmatrices[0].design_info.column_names) - set(["Intercept"]))
         for spec in models[1:]:
             if "~" in spec:
                 raise ValueError(
                     "Received an invalid model specification.  Only the first entry in models may specify outcome variable."
                 )
-            else:
-                self.models += [spec]
+            self.segment_specifications += [spec]
+            self.segment_dmatrices += [patsy.dmatrix(spec, self.data)]
 
-        if len(self.models) > 2:
-            raise NotImplementedError(
-                    'segmented currently supports a maximum of 2 segments'
-            )
+            # make sure there is a single predictor
+            # and no intercept (incercept is handled automatically for now)
+            if not (len(self.segment_dmatrices[-1].design_info.column_names) == 1):
+                raise ValueError(
+                    "Received an invalid model specification.  Segments (other than the first) must omit an intercept and specify exactly one predictor variable."
+                )
 
-        # extract data in accordance with specification
-        # extract design matrices for various model components
-        y_dmat = patsy.dmatrix(self.outcome_var, self.data)
-        x_1_dmat = patsy.dmatrix(self.models[0], self.data)
-        x_2_dmat = patsy.dmatrix(self.models[1], self.data)
-
-        # make sure there is an intercept in the first segment
-        if "Intercept" not in x_1_dmat.design_info.column_names:
-            raise ValueError(
-                "Received an invalid model specification.  Intercepts currently required in the first model segment."
-            )
-        # make sure there is a single predictor
-        # and no intercept (incercept is handled automatically for now)
-        if not (len(x_2_dmat.design_info.column_names) == 1):
-            raise ValueError(
-                "Received an invalid model specification.  Segments (other than the first) must omit an intercept and specify exactly one predictor variable."
-            )
-
-        # make sure predictor variable is identical across specifications
-        if (
-            not x_2_dmat.design_info.column_names[0]
-            in x_1_dmat.design_info.column_names
-        ):
-            raise ValueError(
-                "Received an invalid model specification.  Predictor variable must agree across segment specifications."
-            )
-
-        # this is the name of the column in data
-        # that represents our single predictor
-        self.predictor_var_name = x_2_dmat.design_info.column_names[0]
-        self.predictor_var = x_2_dmat[:, 0]
+            # make sure predictor variable is identical across specifications
+            if (not self.segment_dmatrices[-1].design_info.column_names[0] in predictor_name):
+                raise ValueError(
+                    "Received an invalid model specification.  Predictor variable must agree across segment specifications."
+                )
 
         if validate:
             # validate
@@ -159,27 +157,25 @@ class segmented:
             # if we have received parametric node placement specifications
             if isinstance(changepoints[0], str):
                 self.nodes_parametric = True
-                raise ValueError(
-                    "Parametric node placement is not currently supported."
-                )
-                if not(len(changepoints) == 1):
+                if len(changepoints) > 1:
                     raise ValueError(
-                        "Only a single changepoint can be modeled currently."
-                    )
-
-                if "~" in changepoints:
-                    raise ValueError(
-                        "Received an invalid changepoint specification.  Changepoints may not specify an outcome variable."
+                        "Only a single changepoint may be specified currently."
                     )
                 if self.data is None:
                     raise ValueError(
-                        "Cannot set changepoints without valid data."
+                        "Cannot specify changepoints without valid data."
                     )
-                cp_dmat = patsy.dmatrix(changepoints[0], self.data)
-                # this is the name of the column in data that
-                # represents our single covariate (changepoint predictor)
-                self.node_predictor_var_name = cp_dmat.design_info.column_names[0]
-                self.node_predictor_var = cp_dmat[:, 0]
+                if "~" in changepoints[0]:
+                    raise ValueError(
+                        "Received an invalid changepoint specification.  Changepoints may not specify an outcome variable."
+                    )
+
+                self.changepoint_dmatrices = [patsy.dmatrix(changepoints[0], self.data)]
+
+            else:
+                raise ValueError(
+                    "Changepoints must be patsy strings."
+                )
 
         if validate:
             # validate
@@ -236,9 +232,14 @@ class segmented:
 
         # if number of segments is implied but not set, set it
         if self.num_segments is None:
-            self.num_segments = len(self.models)
+            self.num_segments = len(self.segment_specifications)
 
     def fit(self, guesses):
+
+        # we got parameter values, but already results in self.result
+        # warn user and use the parameter values that were passed in
+        if (self.result is not None) and (params is not None) and (not np.array_equal(self.result, params, equal_nan=True)):
+            warnings.warn('WARNING: segmented.predict() was previously fit, but received parameter values. Using parameter values passed to predict().', RuntimeWarning, stacklevel=2)
 
         if self.nodes_parametric:
             self._fit_parametric(guesses)
@@ -248,9 +249,13 @@ class segmented:
     def _fit_nonparametric(self, changepoints):
 
         assert(len(changepoints) == (self.num_segments-1) )
+        warnings.warn('WARNING: segmented.fit() running with unvalidated parameter guesses (x0).', RuntimeWarning, stacklevel=2)
 
-        x = self.predictor_var
-        y = self.outcome_var
+        # the algorithm below assumes limited model specification
+        # so we pull the individual predictors out of the design matrix
+        y = self.outcome_dmatrix.reshape(-1)
+        intercept = self.segment_dmatrices[0][:,0]
+        x = self.segment_dmatrices[0][:,1]
 
         # this is based on the method described in
         # Muggeo (2003, Statist. Med.)
@@ -263,30 +268,32 @@ class segmented:
                 U += [np.clip(x - changepoint, 0, None)]
                 V += [(x - changepoint) > 0]
 
-            predictors = np.array([np.ones_like(x), x] + U + V)
+            predictors = np.array([intercept, x] + U + V)
 
             result = np.linalg.lstsq(predictors.transpose(), y, rcond=None)
+
             beta = result[0][2:2+len(changepoints)]
             gamma = result[0][2+len(changepoints):]
             changepoints = changepoints - (gamma/beta)
 
+            # check for convergence
             converged = np.abs(np.max(gamma)) < threshold
 
         # save results
-        self.nodes = [x.min(), changepoints[:]]
+        self.nodes = np.hstack([x.min(), changepoints[:]])
         self.coefs = result[0][0:2+len(changepoints)]
         # augment result so that initial node is at x=min(x)
         self.coefs[0] = self.coefs[0] + (self.coefs[1] * x.min())
 
 
     def _fit_parametric(self, x0):
-        warnings.warn('WARNING: segmented.fit() running with unvalidated parameter guesses (x0).', RuntimeWarning)
+        warnings.warn('WARNING: segmented.fit() running with unvalidated parameter guesses (x0).', RuntimeWarning, stacklevel=2)
         def logp(params, df):
 
             y_hat = self.predict(self.data, params=params)
 
             # likelihood of each observation
-            y_dmat = self.data[self.outcome_var_name]
+            y_dmat = self.data[self.outcome_var_name].to_numpy()
             error_sd = params[-1]
             p = scipy.stats.norm.pdf(y_dmat, y_hat, error_sd)
 
@@ -306,32 +313,52 @@ class segmented:
         ).lowest_optimization_result
 
         # save results
-        self.nodes = [
-            self.predictor_var.min(),
-            self.result.x[0],
-        ]
-        self.coefs = [
-            self.result.x[1],
-            self.result.x[2],
-            self.result.x[3]
-        ]
+        # all of this assumes a first segment with an intercept and 1 predictor
+        # and other segments that only include (the same) single predictor
+        self.coefs = []
+        param_index = 0
+        for seg in self.segment_dmatrices:
+            for _ in range(seg.shape[1]):
+                self.coefs += [self.result.x[param_index]]
+                param_index += 1
+
+        predictor_name = list(set(self.segment_dmatrices[0].design_info.column_names) - set(["Intercept"]))
+        self.nodes = [np.min(self.data[predictor_name].to_numpy())]
+
+        for seg in self.changepoint_dmatrices:
+            for __ in range(seg.shape[1]):
+                self.nodes += [self.result.x[param_index]]
+                param_index += 1
 
         return self
 
+
     def predict(self, data, params=None):
 
-        # we got parameter values, but already results in self.result
-        # warn user and use the parameter values that were passed in
-        if (self.result is not None) and (params is not None) and (not np.array_equal(self.result, params, equal_nan=True)):
-            warnings.warn('WARNING: segmented.predict() was previously fit, but received parameter values. Using parameter values passed to predict().', RuntimeWarning)
+        if self.nodes_parametric:
+            return self._predict_parametric(data, params)
+        else:
+            return self._predict_nonparametric(data, params)
+
+
+    def _predict_nonparametric(self, data, params=None):
+
+        predictor_name = list(set(self.segment_dmatrices[0].design_info.column_names) - set(["Intercept"]))
+
         # use the parameter values that were passed in
         if params is not None:
+            if not(len(params) == 5):
+                raise ValueError(
+                    "Received invalid initial parameter value guesses.  Expected 5, received " + str(len(params)) +"."
+                )
+
+
             t_2, beta_0, beta_1, beta_2, error_sd = params
             # here, we define t_1, the first node, to be the
             # minimum of the data **passed when object was created**
             # NOT on the data we are now using for prediction
             # otherwise, the other parameter values make no sense
-            t_1 = self.data[self.predictor_var_name].min()
+            t_1 = self.data[predictor_var_name].min()
         else:
             # extract parameter values from self
             (
@@ -341,23 +368,81 @@ class segmented:
             ) = self.coefs
             t_1, t_2 = self.nodes
 
-        x_1 = data[self.predictor_var_name] - t_1
-        x_2 = data[self.predictor_var_name] - t_2
+        x_1 = data[predictor_var_name] - t_1
+        x_2 = data[predictor_var_name] - t_2
 
         # !!!
         # intercept is currently hardcoded into 1st segment
-        # and omitted form second segment
+        # and omitted from second segment
         # !!!
         y_1 = beta_0 + beta_1 * x_1
         y_2 = beta_2 * x_2
 
-        y_hat = np.where(data[self.predictor_var_name] <= t_2, y_1, y_1 + y_2)
+        y_hat = np.where(data[predictor_var_name] <= t_2, y_1, y_1 + y_2)
 
         if self.result is not None:
             print(y_1)
             print(y_2)
             print(t_2)
             print(y_hat)
+
+        return y_hat
+
+
+    def _predict_parametric(self, data, params=None):
+
+        # use the parameter values that were passed in
+        if params is not None:
+            params = list(params)
+        else:
+            params = self.coefs + self.nodes
+
+        # here, we define t_1, the first node, to be the
+        # minimum of the data **passed when object was created**
+        # NOT on the data we are now using for prediction
+        # otherwise, the other parameter values make no sense
+        if (self.result is not None) and (data is not None) and (not self.data.equals(data)):
+            warnings.warn('WARNING: segmented.predict() was previously fit, but received data. Using previous initial node (e.g., min(x)) to predict().', RuntimeWarning, stacklevel=2)
+        predictor_name = list(set(self.segment_dmatrices[0].design_info.column_names) - set(["Intercept"]))
+
+        segments_params = []
+        cp_params = [np.min(data[predictor_name].to_numpy())]
+        for dmat in self.segment_dmatrices:
+            temp_params = []
+            for _ in range(dmat.shape[1]):
+                asdf = params.pop()
+                temp_params += [asdf]
+                #temp_params += params.pop()
+            segments_params += [np.array(temp_params)]
+        for dmat in self.changepoint_dmatrices:
+            for _ in range(dmat.shape[1]):
+                cp_params += [params.pop()]
+        cp_params = np.array(cp_params)
+
+        # this params is not needed here, but empties the list
+        # which permits the validation below
+        error_sd = params.pop()
+
+        if len(params) > 0:
+            exp_num_params = sum(len(x) for x in segments_params)+ (len(cp_params)-1) + 1
+            raise ValueError(
+                "Received invalid initial parameter value guesses.  Expected " +str(exp_num_params) +", received " + str(exp_num_params+len(params)) +"."
+            )
+
+        x = data[predictor_name].to_numpy()
+        x = x.astype(float)
+        y_hat = np.zeros_like(x)
+
+        for segment in range(self.num_segments):
+            # broken down for debugging
+            a = data[predictor_name]
+            aprime = cp_params[segment]
+            b = segments_params[segment].T
+            c = x - cp_params[segment]
+            d = b * c
+            e = np.sum(d, axis=1)
+            e = e.reshape([-1,1])
+            y_hat += np.where(a <= aprime, np.zeros_like(data[predictor_name]), e)
 
         return y_hat
 
