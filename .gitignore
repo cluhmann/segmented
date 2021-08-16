@@ -1,4 +1,5 @@
 test-*.py
+build_and_deploy_docs.sh
 ROADMAP.md
 references.txt
 
