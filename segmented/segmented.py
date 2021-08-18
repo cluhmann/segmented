@@ -241,6 +241,9 @@ class segmented:
         if (self.result is not None) and (params is not None) and (not np.array_equal(self.result, params, equal_nan=True)):
             warnings.warn('WARNING: segmented.predict() was previously fit, but received parameter values. Using parameter values passed to predict().', RuntimeWarning, stacklevel=2)
 
+        # clear out any old results
+        self.result = None
+
         if self.nodes_parametric:
             self._fit_parametric(guesses)
         else:
@@ -286,19 +289,27 @@ class segmented:
         self.coefs[0] = self.coefs[0] + (self.coefs[1] * x.min())
 
 
-    def _fit_parametric(self, x0):
+    def _fit_parametric(self, x0, debug=False):
         warnings.warn('WARNING: segmented.fit() running with unvalidated parameter guesses (x0).', RuntimeWarning, stacklevel=2)
         def logp(params, df):
 
-            y_hat = self.predict(self.data, params=params)
+            y_hat = self.predict(self.data, params=params, fitting=True, debug=debug)
 
             # likelihood of each observation
             y_dmat = self.data[self.outcome_var_name].to_numpy()
-            error_sd = params[-1]
-            p = scipy.stats.norm.pdf(y_dmat, y_hat, error_sd)
+            error_sd = np.exp(params[-1])
+            logp = scipy.stats.norm.logpdf(y_dmat.reshape([-1,1]), y_hat, error_sd)
 
-            # log likelihood of entire data set
-            return -1 * np.sum(np.log(np.clip(p, tol, 1 - tol)))
+            if debug:
+                print('fitting')
+                print('params: '+str(params))
+                print('y_dmat.reshp: '+str(y_dmat.reshape([-1,1])))
+                print('y_hat: '+str(y_hat))
+                print('logp: '+str(logp))
+                print('sumlogp: '+str(np.sum(logp)))
+
+            # negative log likelihood of entire data set
+            return -1 * np.sum(logp)
 
         # self.result = scipy.optimize.minimize(
         #    logp, x0, args=(self.data,), method="BFGS", options={"maxiter": 1000}
@@ -313,8 +324,6 @@ class segmented:
         ).lowest_optimization_result
 
         # save results
-        # all of this assumes a first segment with an intercept and 1 predictor
-        # and other segments that only include (the same) single predictor
         self.coefs = []
         param_index = 0
         for seg in self.segment_dmatrices:
@@ -333,15 +342,15 @@ class segmented:
         return self
 
 
-    def predict(self, data, params=None):
+    def predict(self, data, params=None, fitting=False, debug=False):
 
         if self.nodes_parametric:
-            return self._predict_parametric(data, params)
+            return self._predict_parametric(data, params, fitting=fitting, debug=debug)
         else:
-            return self._predict_nonparametric(data, params)
+            return self._predict_nonparametric(data, params, fitting=fitting, debug=debug)
 
 
-    def _predict_nonparametric(self, data, params=None):
+    def _predict_nonparametric(self, data, params=None, fitting=False, debug=False):
 
         predictor_name = list(set(self.segment_dmatrices[0].design_info.column_names) - set(["Intercept"]))
 
@@ -380,16 +389,10 @@ class segmented:
 
         y_hat = np.where(data[predictor_var_name] <= t_2, y_1, y_1 + y_2)
 
-        if self.result is not None:
-            print(y_1)
-            print(y_2)
-            print(t_2)
-            print(y_hat)
-
         return y_hat
 
 
-    def _predict_parametric(self, data, params=None):
+    def _predict_parametric(self, data, params=None, fitting=False, debug=False):
 
         # use the parameter values that were passed in
         if params is not None:
@@ -397,52 +400,96 @@ class segmented:
         else:
             params = self.coefs + self.nodes
 
+        if debug:
+            print('params: ' + str(params))
+
         # here, we define t_1, the first node, to be the
         # minimum of the data **passed when object was created**
         # NOT on the data we are now using for prediction
         # otherwise, the other parameter values make no sense
-        if (self.result is not None) and (data is not None) and (not self.data.equals(data)):
+        if fitting and (data is not None) and (not self.data.equals(data)):
             warnings.warn('WARNING: segmented.predict() was previously fit, but received data. Using previous initial node (e.g., min(x)) to predict().', RuntimeWarning, stacklevel=2)
         predictor_name = list(set(self.segment_dmatrices[0].design_info.column_names) - set(["Intercept"]))
 
         segments_params = []
-        cp_params = [np.min(data[predictor_name].to_numpy())]
         for dmat in self.segment_dmatrices:
             temp_params = []
             for _ in range(dmat.shape[1]):
-                asdf = params.pop()
+                if debug:
+                    print('spopping ' + str(params[0]))
+                asdf = params.pop(0)
                 temp_params += [asdf]
-                #temp_params += params.pop()
+                #temp_params += params.pop(0)
             segments_params += [np.array(temp_params)]
-        for dmat in self.changepoint_dmatrices:
-            for _ in range(dmat.shape[1]):
-                cp_params += [params.pop()]
+        # if we have NOT fit(), extract the first min(x) node
+        # and then unpack params argument
+        if fitting:
+            cp_params = [np.min(self.data[predictor_name].to_numpy())]
+            for dmat in self.changepoint_dmatrices:
+                # we need to 
+                for _ in range(dmat.shape[1]):
+                    if debug:
+                        print('cpopping ' + str(params[0]))
+                    cp_params += [params.pop(0)]
+
+            # this param is not needed here, but should empty the list
+            # which permits the validation below
+            error_sd = params.pop(0)
+            # the parameter list should now be empty
+            # if not, something has gone wrong
+            if len(params) > 0:
+                exp_num_params = sum(len(x) for x in segments_params)+ (len(cp_params)-1) + 1
+                raise ValueError(
+                    "Received invalid initial parameter value guesses.  Expected " +str(exp_num_params) +" values, received " + str(exp_num_params+len(params)) +"."
+                )
+
+        # otherwise, the nodes are stored in self.nodes
+        else:
+            # -1 because passed params won't have a value for the first node
+            for i in range(len(self.nodes)-1):
+                params.pop(0)
+            # this param is not needed here, but should empty the list
+            # which permits the validation below
+            error_sd = params.pop(0)
+            # the parameter list should now be empty
+            # if not, something has gone wrong
+            if len(params) > 0:
+                exp_num_params = sum(len(x) for x in segments_params)+ (len(cp_params)-1) + 1
+                raise ValueError(
+                    "Received invalid initial parameter value guesses.  Expected " +str(exp_num_params) +" values, received " + str(exp_num_params+len(params)) +"."
+                )
+
+            cp_params = self.nodes.copy()
+
         cp_params = np.array(cp_params)
-
-        # this params is not needed here, but empties the list
-        # which permits the validation below
-        error_sd = params.pop()
-
-        if len(params) > 0:
-            exp_num_params = sum(len(x) for x in segments_params)+ (len(cp_params)-1) + 1
-            raise ValueError(
-                "Received invalid initial parameter value guesses.  Expected " +str(exp_num_params) +", received " + str(exp_num_params+len(params)) +"."
-            )
 
         x = data[predictor_name].to_numpy()
         x = x.astype(float)
         y_hat = np.zeros_like(x)
 
         for segment in range(self.num_segments):
-            # broken down for debugging
-            a = data[predictor_name]
-            aprime = cp_params[segment]
-            b = segments_params[segment].T
-            c = x - cp_params[segment]
-            d = b * c
-            e = np.sum(d, axis=1)
-            e = e.reshape([-1,1])
-            y_hat += np.where(a <= aprime, np.zeros_like(data[predictor_name]), e)
+            if debug:
+                print('segment params: ' +str(segments_params))
+                print('cp_params: ' +str(cp_params))
+                # broken down for debugging
+                a = data[predictor_name]
+                aprime = cp_params[segment]
+                b = segments_params[segment].T
+                c = x - cp_params[segment]
+                c = np.clip(c, 0, None)
+                d = b * c
+                f = np.sum(d, axis=1)
+                e = f.reshape([-1,1])
+                print('predicting segment #' +str(segment))
+                print('node: ' +str(cp_params[segment]))
+                print('eff. xs: ' +str(c))
+                print('segment params: ' +str(segments_params[segment]))
+                print('product: ' +str(d))
+                print('sum: ' +str(f))
+                print('reshape: ' +str(e))
+            else:
+                e = np.sum(segments_params[segment].T * (x - cp_params[segment]), axis=1).reshape([-1,1])
+            y_hat += np.where(data[predictor_name] <= cp_params[segment], np.zeros_like(data[predictor_name]), e)
 
         return y_hat
 
