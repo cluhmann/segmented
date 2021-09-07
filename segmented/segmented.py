@@ -99,14 +99,14 @@ class segmented:
         self.outcome_var_name, model0 = models[0].split("~")
         # here we need to explicitly exclude an intercept to just grab
         # the outcome column
-        self.outcome_dmatrix = patsy.dmatrix('0+' + self.outcome_var_name, self.data)
+        self.outcome_dmatrix = patsy.dmatrix('0+' + self.outcome_var_name, self.data, return_type='dataframe')
 
         # extract first segment specification (to the right of "~")
         self.segment_specifications = [model0]
-        self.segment_dmatrices = [patsy.dmatrix(model0, self.data)]
+        self.segment_dmatrices = [patsy.dmatrix(model0, self.data, return_type='dataframe')]
 
         # make sure there is an intercept in the first segment
-        if "Intercept" not in self.segment_dmatrices[0].design_info.column_names:
+        if "Intercept" not in self.segment_dmatrices[0].columns:
             raise ValueError(
                 "Received an invalid model specification.  Intercepts currently required in the first model segment."
             )
@@ -118,24 +118,24 @@ class segmented:
             )
 
         # deal with remaining model specifications
-        predictor_name = list(set(self.segment_dmatrices[0].design_info.column_names) - set(["Intercept"]))
+        predictor_name = list(set(self.segment_dmatrices[0].columns) - set(["Intercept"]))
         for spec in models[1:]:
             if "~" in spec:
                 raise ValueError(
                     "Received an invalid model specification.  Only the first entry in models may specify outcome variable."
                 )
             self.segment_specifications += [spec]
-            self.segment_dmatrices += [patsy.dmatrix(spec, self.data)]
+            self.segment_dmatrices += [patsy.dmatrix(spec, self.data, return_type='dataframe')]
 
             # make sure there is a single predictor
             # and no intercept (incercept is handled automatically for now)
-            if not (len(self.segment_dmatrices[-1].design_info.column_names) == 1):
+            if not (len(self.segment_dmatrices[-1].columns) == 1):
                 raise ValueError(
                     "Received an invalid model specification.  Segments (other than the first) must omit an intercept and specify exactly one predictor variable."
                 )
 
             # make sure predictor variable is identical across specifications
-            if (not self.segment_dmatrices[-1].design_info.column_names[0] in predictor_name):
+            if (not self.segment_dmatrices[-1].columns[0] in predictor_name):
                 raise ValueError(
                     "Received an invalid model specification.  Predictor variable must agree across segment specifications."
                 )
@@ -170,7 +170,11 @@ class segmented:
                         "Received an invalid changepoint specification.  Changepoints may not specify an outcome variable."
                     )
 
-                self.changepoint_dmatrices = [patsy.dmatrix(changepoints[0], self.data)]
+                self.changepoint_specifications = ['1'] + changepoints
+                self.changepoint_dmatrices = [
+                    pd.DataFrame({'Intercept':np.ones(self.outcome_dmatrix.shape[1])}),
+                    patsy.dmatrix(changepoints[0], self.data, return_type='dataframe')
+                ]
 
             else:
                 raise ValueError(
@@ -238,7 +242,7 @@ class segmented:
 
         # we got parameter values, but already results in self.result
         # warn user and use the parameter values that were passed in
-        if (self.result is not None) and (params is not None) and (not np.array_equal(self.result, params, equal_nan=True)):
+        if (self.result is not None) and (guesses is not None) and (not np.array_equal(self.result, guesses, equal_nan=True)):
             warnings.warn('WARNING: segmented.predict() was previously fit, but received parameter values. Using parameter values passed to predict().', RuntimeWarning, stacklevel=2)
 
         # clear out any old results
@@ -331,7 +335,7 @@ class segmented:
                 self.coefs += [self.result.x[param_index]]
                 param_index += 1
 
-        predictor_name = list(set(self.segment_dmatrices[0].design_info.column_names) - set(["Intercept"]))
+        predictor_name = list(set(self.segment_dmatrices[0].columns) - set(["Intercept"]))
         self.nodes = [np.min(self.data[predictor_name].to_numpy())]
 
         for seg in self.changepoint_dmatrices:
@@ -351,8 +355,6 @@ class segmented:
 
 
     def _predict_nonparametric(self, data, params=None, fitting=False, debug=False):
-
-        predictor_name = list(set(self.segment_dmatrices[0].design_info.column_names) - set(["Intercept"]))
 
         # use the parameter values that were passed in
         if params is not None:
@@ -409,8 +411,20 @@ class segmented:
         # otherwise, the other parameter values make no sense
         if fitting and (data is not None) and (not self.data.equals(data)):
             warnings.warn('WARNING: segmented.predict() was previously fit, but received data. Using previous initial node (e.g., min(x)) to predict().', RuntimeWarning, stacklevel=2)
-        predictor_name = list(set(self.segment_dmatrices[0].design_info.column_names) - set(["Intercept"]))
 
+        # unpack the name of the main predictor (x)
+        predictor_name = list(set(self.segment_dmatrices[0].columns) - set(["Intercept"]))
+        # there should only be 1 predictor
+        # and it should be common to all segments
+        assert(len(predictor_name) == 1)
+        predictor_name = predictor_name[0]
+
+        # unpack the name of the covariable (z)
+        covariable_name = list(set(self.changepoint_dmatrices[1].columns) - set(["Intercept"]))
+        assert(len(covariable_name) == 1)
+        covariable_name = covariable_name[0]
+
+        # unpack parameters associated with each segment
         segments_params = []
         for dmat in self.segment_dmatrices:
             temp_params = []
@@ -421,75 +435,100 @@ class segmented:
                 temp_params += [asdf]
                 #temp_params += params.pop(0)
             segments_params += [np.array(temp_params)]
-        # if we have NOT fit(), extract the first min(x) node
-        # and then unpack params argument
-        if fitting:
-            cp_params = [np.min(self.data[predictor_name].to_numpy())]
-            for dmat in self.changepoint_dmatrices:
-                # we need to 
-                for _ in range(dmat.shape[1]):
-                    if debug:
-                        print('cpopping ' + str(params[0]))
-                    cp_params += [params.pop(0)]
 
-            # this param is not needed here, but should empty the list
-            # which permits the validation below
-            error_sd = params.pop(0)
-            # the parameter list should now be empty
-            # if not, something has gone wrong
-            if len(params) > 0:
-                exp_num_params = sum(len(x) for x in segments_params)+ (len(cp_params)-1) + 1
-                raise ValueError(
-                    "Received invalid initial parameter value guesses.  Expected " +str(exp_num_params) +" values, received " + str(exp_num_params+len(params)) +"."
-                )
+        # skip the first, dummy dmat
+        # insert extract the first, min(x) node
+        cp_params = [[np.min(self.data[predictor_name].to_numpy())]]
+        # and then unpack the rest
+        for dmat in self.changepoint_dmatrices[1:]:
+            cp_params_current_segment = []
+            # we need to 
+            for _ in range(dmat.shape[1]):
+                if debug:
+                    print('cpopping ' + str(params[0]))
+                cp_params_current_segment += [params.pop(0)]
 
-        # otherwise, the nodes are stored in self.nodes
-        else:
-            # -1 because passed params won't have a value for the first node
-            for i in range(len(self.nodes)-1):
-                params.pop(0)
-            # this param is not needed here, but should empty the list
-            # which permits the validation below
-            error_sd = params.pop(0)
-            # the parameter list should now be empty
-            # if not, something has gone wrong
-            if len(params) > 0:
-                exp_num_params = sum(len(x) for x in segments_params)+ (len(cp_params)-1) + 1
-                raise ValueError(
-                    "Received invalid initial parameter value guesses.  Expected " +str(exp_num_params) +" values, received " + str(exp_num_params+len(params)) +"."
-                )
+            cp_params += [np.array(cp_params_current_segment)]
 
-            cp_params = self.nodes.copy()
+        # this param is not needed here, but should empty the list
+        # which permits the validation below
+        error_sd = params.pop(0)
+        # the parameter list should now be empty
+        # if not, something has gone wrong
+        if len(params) > 0:
+            exp_num_params = sum(len(x) for x in segments_params)+ (len(cp_params)-1) + 1
+            raise ValueError(
+                "Received invalid initial parameter value guesses.  Expected " +str(exp_num_params) +" values, received " + str(exp_num_params+len(params)) +"."
+            )
 
-        cp_params = np.array(cp_params)
+        # extract primary predictor variable
+        print('pname: ' + str(predictor_name))
+        x = patsy.dmatrix(predictor_name, data, return_type='dataframe')[predictor_name].to_numpy(dtype=float).reshape([-1,1])
+        # reconstruct intercept vector
+        intercept = np.ones_like(x) * self.segment_dmatrices[0]['Intercept'].to_numpy()[0]
+        print('cname: ' + covariable_name)
+        y_hat = np.zeros((x.shape[0],))
+        zeros = np.zeros_like(x)
 
-        x = data[predictor_name].to_numpy()
-        x = x.astype(float)
-        y_hat = np.zeros_like(x)
+        print(x.shape)
+        print(intercept.shape)
+        print(y_hat.shape)
+        print(zeros.shape)
 
         for segment in range(self.num_segments):
+            # reconstruct vector of changepoints associated with segment #2
+            cp = cp_params[segment] * patsy.dmatrix(self.changepoint_specifications[segment], data, return_type='dataframe')
+            cp = cp.sum(axis=1).to_numpy(dtype=float).reshape([-1,1])
+
+            print('cp_params: ' +str(cp_params))
+            print(self.changepoint_specifications[segment])
+            print(data)
+            print('cp: ' + str(cp))
+            print(cp.shape)
+
+            # zero out predictor variable at left edge of segment
+            effective_x = x - cp
+            effective_x = np.clip(effective_x, 0, None)
+            # insert intercept when appropriate
+            if 'Intercept' in self.segment_dmatrices[segment].columns:
+                effective_x = np.hstack([intercept,
+                                        effective_x])
+            else:
+                # intercept not requested
+                pass
+
             if debug:
-                print('segment params: ' +str(segments_params))
-                print('cp_params: ' +str(cp_params))
+                print('predicting segment #' +str(segment))
+                print('segment params: ' +str(segments_params[segment]))
+                print('cp_params: ' +str(cp_params[segment]))
                 # broken down for debugging
                 a = data[predictor_name]
                 aprime = cp_params[segment]
-                b = segments_params[segment].T
-                c = x - cp_params[segment]
-                c = np.clip(c, 0, None)
-                d = b * c
-                f = np.sum(d, axis=1)
-                e = f.reshape([-1,1])
-                print('predicting segment #' +str(segment))
-                print('node: ' +str(cp_params[segment]))
+                b = segments_params[segment]
+                c = effective_x
+                print('xs: ' +str(x))
                 print('eff. xs: ' +str(c))
-                print('segment params: ' +str(segments_params[segment]))
+                d = b * c
                 print('product: ' +str(d))
+                f = np.sum(d, axis=1)
                 print('sum: ' +str(f))
+                e = f.reshape([-1,1])
                 print('reshape: ' +str(e))
             else:
-                e = np.sum(segments_params[segment].T * (x - cp_params[segment]), axis=1).reshape([-1,1])
-            y_hat += np.where(data[predictor_name] <= cp_params[segment], np.zeros_like(data[predictor_name]), e)
+                e = np.sum(segments_params[segment] * effective_x.T, axis=1).reshape([-1,1])
+            print('eshp'+str(e.shape))
+            print('yhtshp'+str(y_hat.shape))
+            print('cpshp'+str(cp.shape))
+            print('cp: '+str(cp))
+            comp = data[predictor_name] < np.squeeze(cp)
+            print('cmpshp'+str(comp.shape))
+            print('cmp: '+str(comp))
+            temp = np.where(comp, np.squeeze(zeros), np.squeeze(e))
+            print('e: ' +str(e))
+            print('temp: ' +str(temp))
+            print('y_hatpreupdate: ' +str(y_hat))
+            y_hat = y_hat + temp
+            print('y_hatpostupdate: ' +str(y_hat))
 
         return y_hat
 
