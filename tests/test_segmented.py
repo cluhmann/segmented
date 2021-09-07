@@ -221,14 +221,24 @@ def test_connected_parametric_fit():
     assert(np.all(yhat == y))
 
     # test fit
-    #x = np.array([0,1,2,3,4,5,6,7,8,9])
-    #z = np.array([0,0,0,0,0,0,1,1,1,1])
-    #y = np.array([0,1,2,3,4,5,4,3,2,1])
-    #data = pd.DataFrame({'x':x, 'y':y, 'z':z})
-    #model = sgmt.segmented(['y~1+x', '0+x'], changepoints=['z'], data=data)
-    #model.fit([0, 1, 1, 1, 1, 0])
-    #assert(model.nodes == pytest.approx([x.min(), 5]))
-    #assert(model.coefs == pytest.approx([0,1,-2]))
+    # linearly spaced
+    x = np.array([0,1,2,3,4,5,6,7,8,9])
+    # inverted 'V'
+    y = np.array([0,1,2,3,4,5,4,3,2,1])
+    b = np.array([0,1,-1])
+    cp = [2,0]
+    y = b[0] + (b[1] * x)
+    y+= (b[2] * np.clip(x-cp[0], 0, None))
+    # not used currently
+    z = cp[1] * np.ones_like(x)
+    data = pd.DataFrame({'x':x, 'y':y, 'z':z})
+    model = sgmt.segmented(['y~1+x', '0+x'], changepoints=['1+z'], data=data)
+    model.fit([0, 0, 0, data['x'].median(), 0, 1])
+    print(model.result.x[0:-1])
+    print(np.hstack((b,cp)))
+    print(model.result.x[0:-1] - np.hstack((b,cp)))
+    assert( model.result.x[0:-1] == pytest.approx(np.hstack((b,cp)), abs=.05) )
+
 
 
 
