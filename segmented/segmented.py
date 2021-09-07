@@ -172,7 +172,7 @@ class segmented:
 
                 self.changepoint_specifications = ['1'] + changepoints
                 self.changepoint_dmatrices = [
-                    pd.DataFrame({'Intercept':np.ones(self.outcome_dmatrix.shape[1])}),
+                    pd.DataFrame({'Intercept':np.ones(self.data.shape[0])}),
                     patsy.dmatrix(changepoints[0], self.data, return_type='dataframe')
                 ]
 
@@ -260,9 +260,9 @@ class segmented:
 
         # the algorithm below assumes limited model specification
         # so we pull the individual predictors out of the design matrix
-        y = self.outcome_dmatrix.reshape(-1)
-        intercept = self.segment_dmatrices[0][:,0]
-        x = self.segment_dmatrices[0][:,1]
+        y = self.outcome_dmatrix.to_numpy().reshape(-1)
+        intercept = self.segment_dmatrices[0].iloc[:,0]
+        x = self.segment_dmatrices[0].iloc[:,1]
 
         # this is based on the method described in
         # Muggeo (2003, Statist. Med.)
@@ -293,39 +293,53 @@ class segmented:
         self.coefs[0] = self.coefs[0] + (self.coefs[1] * x.min())
 
 
-    def _fit_parametric(self, x0, debug=False):
+    def logp(self, params, debug=False):
+
+        y_hat = self.predict(self.data, params=params, fitting=True, debug=debug)
+
+        # likelihood of each observation
+        #y_dmat = self.data[self.outcome_var_name].to_numpy()
+        y_dmat = self.outcome_dmatrix.to_numpy().reshape(-1)
+        error_sd = np.exp(params[-1])
+        #logp = scipy.stats.norm.logpdf(y_dmat.reshape([-1,1]), y_hat, error_sd)
+        logp = scipy.stats.norm.logpdf(y_dmat, y_hat, error_sd)
+
+        if debug:
+            print('fitting')
+            print('params: '+str(params))
+            print('y_dmat: '+str(y_dmat.reshape([-1,1])))
+            #print('y_dmat: '+str(y_dmat.reshape([-1,1])))
+            print('y_hat: '+str(y_hat))
+            print('logp: '+str(logp))
+            print('sumlogp: '+str(np.sum(logp)))
+
+        # negative log likelihood of entire data set
+        return -1 * np.sum(logp)
+
+
+    def _fit_parametric(self, x0, debug=False, **kwargs):
         warnings.warn('WARNING: segmented.fit() running with unvalidated parameter guesses (x0).', RuntimeWarning, stacklevel=2)
-        def logp(params, df):
 
-            y_hat = self.predict(self.data, params=params, fitting=True, debug=debug)
+        kwargs.setdefault('method', "trust-constr")
+        kwargs.setdefault('options', {"maxiter": 1000})
+        self.result = scipy.optimize.minimize(self.logp, x0, **kwargs)
 
-            # likelihood of each observation
-            y_dmat = self.data[self.outcome_var_name].to_numpy()
-            error_sd = np.exp(params[-1])
-            logp = scipy.stats.norm.logpdf(y_dmat.reshape([-1,1]), y_hat, error_sd)
+        #self.result = scipy.optimize.minimize(
+        #    self.logp, x0, method="BFGS", options={"maxiter": 1000}
+        #)
 
-            if debug:
-                print('fitting')
-                print('params: '+str(params))
-                print('y_dmat.reshp: '+str(y_dmat.reshape([-1,1])))
-                print('y_hat: '+str(y_hat))
-                print('logp: '+str(logp))
-                print('sumlogp: '+str(np.sum(logp)))
+        #self.result = scipy.optimize.minimize(
+        #    self.logp, x0, method="trust-constr", options={"maxiter": 1000}
+        #)
 
-            # negative log likelihood of entire data set
-            return -1 * np.sum(logp)
-
-        # self.result = scipy.optimize.minimize(
-        #    logp, x0, args=(self.data,), method="BFGS", options={"maxiter": 1000}
-        # )
-        self.result = scipy.optimize.basinhopping(
-            logp,
-            x0,
-            minimizer_kwargs={"args": (self.data,), "method": "BFGS"},
-            niter=500,
-            T = 100,
-            stepsize = 4,
-        ).lowest_optimization_result
+        #self.result = scipy.optimize.basinhopping(
+        #    self.logp,
+        #    x0,
+        #    minimizer_kwargs={"args": (self.data,), "method": "BFGS"},
+        #    niter=500,
+        #    T = 100,
+        #    stepsize = 4,
+        #).lowest_optimization_result
 
         # save results
         self.coefs = []
@@ -360,7 +374,7 @@ class segmented:
         if params is not None:
             if not(len(params) == 5):
                 raise ValueError(
-                    "Received invalid initial parameter value guesses.  Expected 5, received " + str(len(params)) +"."
+                    "predict() received invalid initial parameter value guesses.  Expected 5, received " + str(len(params)) +"."
                 )
 
 
@@ -431,7 +445,12 @@ class segmented:
             for _ in range(dmat.shape[1]):
                 if debug:
                     print('spopping ' + str(params[0]))
-                asdf = params.pop(0)
+                try:
+                    asdf = params.pop(0)
+                except IndexError:
+                    raise ValueError(
+                        "predict() received too few parameter values to unpack."
+                    )
                 temp_params += [asdf]
                 #temp_params += params.pop(0)
             segments_params += [np.array(temp_params)]
@@ -462,29 +481,30 @@ class segmented:
             )
 
         # extract primary predictor variable
-        print('pname: ' + str(predictor_name))
+        #print('pname: ' + str(predictor_name))
         x = patsy.dmatrix(predictor_name, data, return_type='dataframe')[predictor_name].to_numpy(dtype=float).reshape([-1,1])
         # reconstruct intercept vector
         intercept = np.ones_like(x) * self.segment_dmatrices[0]['Intercept'].to_numpy()[0]
-        print('cname: ' + covariable_name)
+        #print('cname: ' + covariable_name)
         y_hat = np.zeros((x.shape[0],))
         zeros = np.zeros_like(x)
 
-        print(x.shape)
-        print(intercept.shape)
-        print(y_hat.shape)
-        print(zeros.shape)
+        #print(x.shape)
+        #print(intercept.shape)
+        #print(y_hat.shape)
+        #print(zeros.shape)
 
         for segment in range(self.num_segments):
             # reconstruct vector of changepoints associated with segment #2
             cp = cp_params[segment] * patsy.dmatrix(self.changepoint_specifications[segment], data, return_type='dataframe')
             cp = cp.sum(axis=1).to_numpy(dtype=float).reshape([-1,1])
 
-            print('cp_params: ' +str(cp_params))
-            print(self.changepoint_specifications[segment])
-            print(data)
-            print('cp: ' + str(cp))
-            print(cp.shape)
+            if debug:
+                print('cp_params: ' +str(cp_params))
+                print(self.changepoint_specifications[segment])
+                print(data)
+                print('cp: ' + str(cp))
+                print(cp.shape)
 
             # zero out predictor variable at left edge of segment
             effective_x = x - cp
@@ -515,20 +535,20 @@ class segmented:
                 e = f.reshape([-1,1])
                 print('reshape: ' +str(e))
             else:
-                e = np.sum(segments_params[segment] * effective_x.T, axis=1).reshape([-1,1])
-            print('eshp'+str(e.shape))
-            print('yhtshp'+str(y_hat.shape))
-            print('cpshp'+str(cp.shape))
-            print('cp: '+str(cp))
+                e = np.sum(segments_params[segment] * effective_x, axis=1).reshape([-1,1])
             comp = data[predictor_name] < np.squeeze(cp)
-            print('cmpshp'+str(comp.shape))
-            print('cmp: '+str(comp))
             temp = np.where(comp, np.squeeze(zeros), np.squeeze(e))
-            print('e: ' +str(e))
-            print('temp: ' +str(temp))
-            print('y_hatpreupdate: ' +str(y_hat))
+
+            if debug:
+                print('eshp'+str(e.shape))
+                print('yhtshp'+str(y_hat.shape))
+                print('cpshp'+str(cp.shape))
+                print('cp: '+str(cp))
+                print('cmpshp'+str(comp.shape))
+                print('cmp: '+str(comp))
+                print('e: ' +str(e))
+                print('y_hatpreupdate: ' +str(y_hat))
             y_hat = y_hat + temp
-            print('y_hatpostupdate: ' +str(y_hat))
 
         return y_hat
 
@@ -536,3 +556,5 @@ class segmented:
     def summary(self):
         # raise NotImplementedError("segmented.summary() not implemented at this time.")
         return self.result
+
+
