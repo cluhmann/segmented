@@ -127,24 +127,24 @@ def test_connected_nonparametric_fit():
     data = pd.DataFrame({'x':x, 'y':y})
     model = sgmt.segmented(['y~1+x', '0+x'], data=data)
     model.fit([7])
-    assert(model.nodes == pytest.approx([x.min(), 5]))
-    assert(model.coefs == pytest.approx([0,0,1]))
+    assert(model.changepoint_coefs == pytest.approx([x.min(), 5]))
+    assert(model.segment_coefs == pytest.approx([0,0,1]))
 
     x = np.array([0,1,2,3,4,5,6,7,8,9])
     y = np.array([2,2,2,2,2,2,3,4,5,6])
     data = pd.DataFrame({'x':x, 'y':y})
     model = sgmt.segmented(['y~1+x', '0+x'], data=data)
     model.fit([7])
-    assert(model.nodes == pytest.approx([x.min(), 5]))
-    assert(model.coefs == pytest.approx([2,0,1]))
+    assert(model.changepoint_coefs == pytest.approx([x.min(), 5]))
+    assert(model.segment_coefs == pytest.approx([2,0,1]))
 
     x = np.array([0,1,2,3,4,5,6,7,8,9])
     y = np.array([0,1,2,3,4,5,7,9,11,13])
     data = pd.DataFrame({'x':x, 'y':y})
     model = sgmt.segmented(['y~1+x', '0+x'], data=data)
     model.fit([7])
-    assert(model.nodes == pytest.approx([x.min(), 5]))
-    assert(model.coefs == pytest.approx([0,1,1]))
+    assert(model.changepoint_coefs == pytest.approx([x.min(), 5]))
+    assert(model.segment_coefs == pytest.approx([0,1,1]))
 
     # verify degenerate left-most node location
     x = np.array([10,11,12,13,14,15,16,17,18,19])
@@ -152,8 +152,8 @@ def test_connected_nonparametric_fit():
     data = pd.DataFrame({'x':x, 'y':y})
     model = sgmt.segmented(['y~1+x', '0+x'], data=data)
     model.fit([14])
-    assert(model.nodes == pytest.approx([x.min(), 15]))
-    assert(model.coefs == pytest.approx([0,0,1]))
+    assert(model.changepoint_coefs == pytest.approx([x.min(), 15]))
+    assert(model.segment_coefs == pytest.approx([0,0,1]))
 
 
 def test_connected_parametric_fit():
@@ -161,9 +161,11 @@ def test_connected_parametric_fit():
     data = pd.DataFrame({'x':[0,5], 'y':[0,0], 'z':[0,1]})
     model = sgmt.segmented(['y~1+x', '0+x'], changepoints=['1+z'], data=data)
 
+    # test predictions
+
     ### these tests focus on the second (non-zero) data point
     ### the first is there to 'set' the left edge of the first segment
-    ### consequences of interest are seen on yhat[1]
+    ### thus, the consequences of interest are seen on yhat[1]
 
     # data point should be in segment #1
     yhat = model.predict(data, params=[0, 1, 1, 7, 0, 1])
@@ -193,8 +195,7 @@ def test_connected_parametric_fit():
     yhat = model.predict(data, params=[3, 1, 1, 1, 2, 1])
     assert(np.all(yhat == [3,10]))
 
-
-    # test predictions
+    # more involved tests of predictions
     x = np.array([0,1,2,3,4,5,6,7,8,9])
     # coefficients
     b = np.array([10, 1, -2])
@@ -209,7 +210,7 @@ def test_connected_parametric_fit():
     # have changepoint specification include intercept and covariable (z)
     model = sgmt.segmented(['y~1+x', '0+x'], changepoints=['1+z'], data=data)
     # inserting original parameter values should reproduce data
-    yhat = model._predict_parametric(data, params=[b[0], b[1], b[2], cp, 0, 1])
+    yhat = model.predict(data, params=[b[0], b[1], b[2], cp, 0, 1])
     assert(np.all(yhat == y))
 
     # include covariable that is just a vector of whatever `cp` is
@@ -217,27 +218,22 @@ def test_connected_parametric_fit():
     # have changepoint specification only include covariable (z) (no intercept)
     model = sgmt.segmented(['y~1+x', '0+x'], changepoints=['0+z'], data=data)
     # original parameter values and a changepoint *slope* of 1 should reproduce data
-    yhat = model._predict_parametric(data, params=[b[0], b[1], b[2], 1, 1])
+    yhat = model.predict(data, params=[b[0], b[1], b[2], 1, 1])
     assert(np.all(yhat == y))
 
     # test fit
     # linearly spaced
     x = np.array([0,1,2,3,4,5,6,7,8,9])
-    # inverted 'V'
-    y = np.array([0,1,2,3,4,5,4,3,2,1])
     b = np.array([0,1,-1])
     cp = [2,0]
     y = b[0] + (b[1] * x)
     y+= (b[2] * np.clip(x-cp[0], 0, None))
-    # not used currently
-    z = cp[1] * np.ones_like(x)
+    z = cp[1] * np.ones_like(x) # not used
     data = pd.DataFrame({'x':x, 'y':y, 'z':z})
     model = sgmt.segmented(['y~1+x', '0+x'], changepoints=['1+z'], data=data)
     model.fit([0, 0, 0, data['x'].median(), 0, 1])
-    print(model.result.x[0:-1])
-    print(np.hstack((b,cp)))
-    print(model.result.x[0:-1] - np.hstack((b,cp)))
     assert( model.result.x[0:-1] == pytest.approx(np.hstack((b,cp)), abs=.05) )
+    assert( model.result.x[-1] < -3 )
 
 
 
