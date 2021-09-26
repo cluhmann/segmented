@@ -6,7 +6,47 @@ import scipy.optimize
 import scipy.stats
 import patsy
 
+from multiprocessing import Pool
+from contextlib import nullcontext
+
+
+
 tol = 1e-6
+
+# these functions are used to convert parameters from (ragged) nested lists
+# of numpy arrays to flatten arrays for estimation/optimization
+# the unflattening operation is the tricky one as it must reconstitute
+# the flattened list back into the appropriate (ragged) shape
+def _flatten(values):
+    if isinstance(values, np.ndarray):
+        yield values.flatten()
+    else:
+        for value in values:
+            yield from _flatten(value)
+
+def flatten(values):
+    # flatten nested lists of np.ndarray to np.ndarray
+    return np.concatenate(list(_flatten(values)))
+
+def _unflatten(flat_values, prototype, offset):
+    if isinstance(prototype, np.ndarray):
+        shape = prototype.shape
+        new_offset = offset + np.product(shape)
+        value = flat_values[offset:new_offset].reshape(shape)
+        return value, new_offset
+    else:
+        result = []
+        for value in prototype:
+            value, offset = _unflatten(flat_values, value, offset)
+            result.append(value)
+        return result, offset
+
+def unflatten(flat_values, prototype):
+    # unflatten np.ndarray to nested lists with structure of prototype
+    result, offset = _unflatten(flat_values, prototype, 0)
+    assert(offset == len(flat_values))
+    return result
+
 
 
 class sgmt_base:
@@ -356,9 +396,11 @@ class segmented(sgmt_base):
         self.segment_coefs = []
         param_index = 0
         for seg in self.segment_dmatrices:
+            this_seg_coefs = []
             for _ in range(seg.shape[1]):
-                self.segment_coefs += [self.result.x[param_index]]
+                this_seg_coefs += [self.result.x[param_index]]
                 param_index += 1
+            self.segment_coefs += [this_seg_coefs]
 
         # save min(x) as the left, terminal node
         predictor_name = list(set(self.segment_dmatrices[0].columns) - set(["Intercept"]))
@@ -368,16 +410,18 @@ class segmented(sgmt_base):
         # for each segment
         for seg in self.changepoint_dmatrices:
             # for each predictor in the segment's changepoint specification
+            this_cp_coefs = []
             for __ in range(seg.shape[1]):
-                self.changepoint_coefs += [self.result.x[param_index]]
+                this_seg_coefs += [self.result.x[param_index]]
                 param_index += 1
+            self.changepoint_coefs += [this_seg_coefs]
 
         return self
 
 
     def logp(self, params, debug=False):
 
-        # heper function for fit()/optimization method below
+        # helper function for fit()/optimization method below
 
         # predict outcome variable
         y_hat = self.predict(self.data, params=params, fitting=True, debug=debug)

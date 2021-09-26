@@ -156,6 +156,61 @@ def test_connected_nonparametric_fit():
     assert(model.segment_coefs == pytest.approx([0,0,1]))
 
 
+def test_bayes():
+
+    data = pd.DataFrame({'x':[0,5], 'y':[0,0], 'z':[0,1]})
+
+    # 2 connected segments, parametric changepoint
+    # note that there are *2* changepoint specifications here
+    # this is because we want users to be explicit about there being a
+    # (semi-degenerate) changepoint at min(x)
+    # this should help make it clear that all slopes are changes in slope
+    model = sgmt.bayes_sgmt(['y~1+x', '0+x'], changepoints=['1', '1+z'], data=data)
+
+    # 3 connected segments, static changepoints
+    model = sgmt.bayes_sgmt(['y~1+x'] + 2*['0+x'], changepoints=3*['1'], data=data)
+
+    # 2 disconnected segments, static changepoint
+    model = sgmt.bayes_sgmt(['y~1+x', '1+x'], changepoints=['1', '1'], data=data)
+
+    # 2 connected segments, covariates, and parametric changepoints
+    # here, income is a covariate in the model so it is ambiguous which
+    # varaible the changepoint will operate over
+    # so we need to specify it explicitly
+    data = pd.DataFrame({'score':[0,0], 'time':[0,5], 'income':[12,33], 'IQ':[0,1]})
+    model = sgmt.bayes_sgmt(['score~1+time+income', '1+time+income'],
+                            changepoints=['1', '1+IQ'],
+                            x_var='time',
+                            data=data)
+
+    # while we're at it, we might as well allow explicit indication of the
+    # the outcome variable as it might ease the writing of segment specifications
+    data = pd.DataFrame({'y':[0,0], 'x':[0,5]})
+    sgmt.bayes_sgmt(5 * ['1+x'], changepoints=5*['1'], y_var='y', data=data)
+
+    # at some point we can permit these sort of implicit specs
+    # fill in changepoints with intercepts
+    sgmt.bayes_sgmt(['y', '1+x', '1+x'], data=data)
+    # equivalent to:
+    # sgmt.bayes_sgmt(['y', '1+x', '1+x'], changepoints=['1', '1','1'], data=data)
+
+    # focus on estimation
+    model = sgmt.bayes_sgmt(['y~1+x'], data=data)
+    # fit model
+    model.fit()
+    # summarize the model estimation
+    sgmt.summary(model.trace)
+
+    # fit model, return trace, and don't save trace internally
+    trace = model.fit(save_trace=False)
+    sgmt.summary(trace)
+
+    # fit model and make predictions from new data
+    model.fit()
+    model.predict(pd.DataFrame({'x':[1,2], 'z':[3,4]}))
+
+
+
 def test_connected_parametric_fit():
 
     data = pd.DataFrame({'x':[0,5], 'y':[0,0], 'z':[0,1]})

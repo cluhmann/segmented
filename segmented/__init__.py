@@ -1,5 +1,6 @@
 #!/usr/bin/python
 
 from .demo import demo
-from .segmented import nonparametric
-from .segmented import segmented
+from .frequentist import nonparametric
+from .frequentist import segmented
+from .bayes import bayes
