@@ -5,6 +5,7 @@ import pandas as pd
 import scipy.optimize
 import scipy.stats
 import patsy
+import arviz
 
 from multiprocessing import Pool
 from contextlib import nullcontext
@@ -12,7 +13,6 @@ from contextlib import nullcontext
 
 
 tol = 1e-6
-
 
 
 class bayes_base:
@@ -38,7 +38,9 @@ class bayes_base:
         self.segment_params = None
 
         self.priors = None
-        self.trace = None
+
+        self.family = None
+        self.link = None
 
 
     def set_data(self, data=None, validate=True):
@@ -188,10 +190,6 @@ class bayes_base:
             self.set_num_segments(len(self.segment_specifications))
 
 
-    def summary(self):
-        # raise NotImplementedError("segmented.summary() not implemented at this time.")
-        return self.trace
-
 
 
 
@@ -208,15 +206,6 @@ class bayes(bayes_base):
         self.validate_parameters()
 
 
-    def set_priors(self, priors):
-        # TODO
-        # the plan is to accept frozen scipy distributions
-        # e.g., scipy.stats.norm(loc=10, scale=3.7)
-        # the pdfs of these frozen distributions can then be used
-        # to generate log priors at sampled locations during sampling
-        pass
-
-
     def fit(self, num_samples=1000, num_burnin=200, num_walkers=30, num_cores=None):
 
         try:
@@ -230,13 +219,13 @@ class bayes(bayes_base):
         p0 = self.gen_start_point(num_walkers)
 
         # instantiate context appropriate for the number of cores requested
-        if cores is not None:
+        if num_cores is not None:
             poolholder = Pool(processes=num_cores)
         else:
             poolholder = nullcontext()
         with poolholder as pool:
             # generate sampler
-            sampler = emcee.EnsembleSampler(nwalkers, ndim, self.logp,
+            sampler = emcee.EnsembleSampler(num_walkers, len(self.prior), self.logp,
                                             moves=emcee.moves.DESnookerMove(),
                                             pool=pool)
             if num_burnin > 0:
@@ -244,9 +233,44 @@ class bayes(bayes_base):
                 sampler.reset()
             sampler.run_mcmc(p0, nsamples, progress=True)
 
-        return sampler.get_chain()
+        # define variable names, it cannot be inferred from emcee
+        var_names = self.gather_parameter_names()
+        return arviz.from_emcee(sampler, var_names=var_names)
 
-    def gather_parameters(self):
+
+    def gen_start_point(self, num_walkers):
+
+        # set up the starting point for each parameter and walker
+        num_sgmt_params = len([len(x.columns) for x in self.segment_dmatrices])
+        num_cp_params = len([len(x.columns) for x in self.changepoint_dmatrices])
+        # plus 1 because of the SD of the error term
+        # at some point we need to have a list of error specifications
+        num_dims = num_sgmt_params + num_cp_params + 1
+        # initial coefficients for segment predictors
+        # TODO: these should probably be informed by/sampled from the prior
+        p0 = [0 for i in range(num_sgmt_params)]
+        # initial coefficients for changepoint predictors
+        # intercept set to mean of x
+        #p0 += [np.mean(self.data[self.x_var].to_numpy())]
+        #p0 += [0 for i in range(num_cp_params-1)]
+        # assume a single
+        p0 += [1 for i in range(num_cp_params-1)]
+        # generate a "fuzzed" version of those initial guesses
+        # for each walker that we will use for MCMC
+        jitter = .04
+        p0 = np.array(p0)
+        print((num_walkers, len(p0)))
+        p0 = p0 + np.random.normal(scale=jitter, size=(num_walkers, len(p0)))
+        # intial guess for error term SD must be positive
+        # we use the sample SD and then scale it by some factor
+        sdfactor = 0.1
+        p0 = np.hstack([p0, sdfactor * np.std(self.data[self.y_var]) * np.random.random(num_walkers).reshape(-1,1)])
+        print('gen_start_point believes we have ' +str(p0.shape)+' parameters')
+        return p0
+
+
+
+    def gather_parameter_names(self):
         # for now, just generate strings of each specification parameter
         # and each changepoint parameter
 
@@ -254,57 +278,91 @@ class bayes(bayes_base):
         # for each segment
         for i,dmat in enumerate(self.segment_dmatrices):
             # for each predictor in specification
-            param_names += [f'sgmt_{var}_{i}' for var in dmat.columns]
+            param_names += [f'{var}_{i}' for var in dmat.columns]
 
+        # for each changepoint
         for i,dmat in enumerate(self.changepoint_dmatrices):
             # for each predictor in specification
             param_names += [f'cp_{var}_{i}' for var in dmat.columns]
 
+        # for each error structure (only 1 right now)
         param_names += ['sigma_0']
 
         return param_names
 
 
-    def gen_start_point(self, num_walkers):
-        # set up the starting point for each parameter and walker
-        num_sgmt_params = len([len(x) for x in self.segment_dmatrices.columns])
-        num_cp_params = len([len(x) for x in self.changepoint_dmatrices.columns])
-        # plus 1 because of the SD of the error term
-        # at some point we need to have a list of error specifications
-        num_dims = num_sgmt_params + num_cp_params + 1
-        # initial coefficients for segment predictors
-        # TODO: these should probably be informed by the priors
-        p0 = [0 for i in range(num_sgmt_params)]
-        # initial coefficients for changepoint predictors
-        # intercept set to mean of x
-        p0 += [np.mean(x)] + [0 for i in range(num_cp_params-1)]
-        # generate a "fuzzed" version of those initial guesses
-        # for each walker that we will use for MCMC
-        jitter = .04
-        p0 += np.random.normal(scale=jitter, size=(num_walkers, len(p0)))
-        # intial guess for error term SD must be positive
-        # we use the sample SD and then scale it by some factor
-        sdfactor = 0.1
-        p0 = np.hstack([p0, sdfactor * np.std(y) * np.random.random(num_walkers).reshape(-1,1)])
-        return p0
+    def logp(self, point):
+        return self.log_prior(point) + self.likelihood(point)
 
 
-
-    def logp(self, params):
-        return self.log_prior(params) + self.likelihood(params)
-
-
-    def log_prior(self, params, debug=False):
-        # TODO
+    def set_priors(self, priors=None):
         pass
+        if priors is None:
+            self.__set_data_informed_priors()
+        else:
+            # TODO
+            # the plan is to accept frozen scipy distributions
+            # e.g., scipy.stats.norm(loc=10, scale=3.7)
+            # the pdfs of these frozen distributions can then be used
+            # to generate log priors at sampled locations during sampling
+            pass
 
 
-    def likelihood(self, params, debug=False):
+    def __set_data_informed_priors(self):
+        # TODO
+        # construct priors based on the data we have in self.data
+        # intercepts ~ t(loc = 0, scale = 3 * sd(y), nu = 3)
+        # slopes ~ t(loc = 0, scale = sd(y)/(max(x) − min(x)), nu = 3)
+        # changepoints?
+        # epsilon ~ gamma?
 
-        # helper function for fit()/optimization method below
+        y_sd = np.std(self.data[self.y_var])
+        x_range = np.ptp(self.data[self.x_var])
+        prior = []
+        # for each segment
+        for i,dmat in enumerate(self.segment_dmatrices):
+            # for each predictor in specification
+            for var in dmat.columns:
+                if var == 'Intercept':
+                    prior += [scipy.stats.t(df = 3., loc = 0., scale = 3. * y_sd)]
+                else:
+                    prior += [scipy.stats.t(df = 3., loc = 0., scale = y_sd/x_range)]
+
+        # for now, only permit a series of "intercept only" changepoint
+        # specifications, making the priors much more straightforward
+        # the components of the Dirichlet will be summed in order
+        # with each changepoint's location expressed as a proportion of the
+        # observed range (i.e., min(x) = 0, max(x) = 1)
+        # so in a 3-segment model, with proposed changepoints at .3 and .7,
+        # would be conceptualized as an observation of [.3, .4, .3]
+        # because the sums of the Dirichlet components 1 through k are:
+        # .3 and .3 + .4 = .7.  The final sum (e.g., .3+.4+.3) is always 1.0.
+        # So the prior probability of this particular set of proposed
+        # changepoints (i.e., .3 and .7) would be:
+        # scipy.stats.dirichlet([alpha1, alpha2, alpha3]).pdf([.3, .4, .3])
+        prior += [scipy.stats.dirichlet(np.ones(len(self.changepoint_dmatrices)))]
+
+        # later we will implement priors for a wider variety of cp specs
+        # and will need to sort out the priors for such specifications
+        #for i,dmat in enumerate(self.changepoint_dmatrices):
+        #    # for each predictor in specification
+
+        # for each error structure (only 1 right now)
+        prior += [scipy.stats.halfnorm(loc = 0, scale=y_sd)]
+        self.prior = prior
+
+
+    def log_prior(self, point, debug=False):
+        logp = 0
+        for val, dist in zip(point, self.prior):
+            logp += dist.pdf(val)
+        return logp
+
+
+    def likelihood(self, point, debug=False):
 
         # predict outcome variable
-        y_hat = self.predict(self.data, params=params, fitting=True, debug=debug)
+        y_hat = self.predict(point, fitting=True, debug=debug)
 
         # likelihood of each observation
         y_dmat = self.outcome_dmatrix.to_numpy().reshape(-1)
@@ -324,14 +382,9 @@ class bayes(bayes_base):
         return np.sum(logp)
 
 
-    def predict(self, data, params=None, fitting=False, debug=False):
+    def predict(self, params, data=None, fitting=False, debug=False):
 
-        # use the parameter values that were passed in
-        if params is not None:
-            params = list(params)
-        else:
-            params = self.segment_coefs + self.changepoint_coefs
-
+        params = list(params)
         if debug:
             print('params: ' + str(params))
 
@@ -340,7 +393,7 @@ class bayes(bayes_base):
         # NOT on the data we are now using for prediction
         # otherwise, the other parameter values make no sense
         if fitting and (data is not None) and (not self.data.equals(data)):
-            warnings.warn('WARNING: segmented.predict() was previously fit, but received data. Using previous initial node (e.g., min(x)) to predict().', RuntimeWarning, stacklevel=2)
+            warnings.warn('WARNING: model was previously fit, but received data. Using previous observation window (e.g., min(x) and min(x)) to predict().', RuntimeWarning, stacklevel=2)
 
         # unpack the name of the main predictor (x)
         predictor_name = list(set(self.segment_dmatrices[0].columns) - set(["Intercept"]))
