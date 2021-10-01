@@ -1,6 +1,6 @@
 # segmented
 
-segmented is a Python toolbox for performing segmented regression, with an initial focus on parametric changepoints characterizations.  The package currently provides two classes, each serving different purposes and each providing different feature sets.  The `segmented.demo` class is for demonstration and replication purposes only (please [see here](#demo) for details).  The `segmented.segmented` class provides the core functionality.  This class currently permits connected, parametric segmented linear regression models with identity link functions.  Eventually, this class will permit an arbitrary number of segments/nodes, alternative link functions, etc.
+segmented is a Python toolbox for performing segmented regression, with an initial focus on characterizing parametric changepoints.  The package currently provides two classes, each serving different purposes and each providing different feature sets.  The `segmented.demo` class is for demonstration and replication purposes only (please [see here](#demo) for details).  The `segmented.segmented` class provides the core functionality.  This class currently permits connected, parametric segmented linear regression models with identity link functions.  Eventually, this class will permit an arbitrary number of segments/nodes, alternative link functions, etc.
 
 ## Installation
 
