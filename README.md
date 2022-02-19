@@ -12,7 +12,7 @@ pip install segmented
 
 ## Segmented Class
 
-Here, we briefly outline the functionality of the `segmented.segmented` class.  This class is intended to be the workhorse class of the segmented package.  This class currently permits the construction of segmented linear regression models that are a) connected, b) parametric (or non-parametric), and c) have identity link functions.  Future releases will relax these requirements (see below).
+Here, we briefly outline the functionality of the `segmented.segmented` class.  This class is intended to be the workhorse class of the segmented package.  This class currently permits the construction of segmented linear regression models that are a) connected, b) parametric (or non-parametric), and c) have identity link functions, and d) Gaussian noise.  Future releases will relax these requirements (see below).
 
 Let's see an example.  In what follows, we assume the following initial imports.  These are, coincidentally, the packages required by segmented:
 
