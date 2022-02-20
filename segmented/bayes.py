@@ -260,7 +260,7 @@ class bayes(bayes_base):
             if num_burnin > 0:
                 p0 = sampler.run_mcmc(p0, num_burnin, progress=True)
                 sampler.reset()
-            sampler.run_mcmc(p0, nsamples, progress=True)
+            sampler.run_mcmc(p0, num_samples, progress=True)
 
         # define variable names, it cannot be inferred from emcee
         var_names = self.gather_parameter_names()
@@ -329,12 +329,6 @@ class bayes(bayes_base):
         return param_names
 
 
-    def logp(self, point, data=None):
-        if data is None:
-            data = self.data
-        return self.log_prior(point) + self.likelihood(point, data=data)
-
-
     def set_priors(self, priors=None):
         pass
         if priors is None:
@@ -396,6 +390,16 @@ class bayes(bayes_base):
         self.prior = prior
 
 
+    def logp(self, point, data=None):
+        if data is None:
+            data = self.data
+        log_prior = self.log_prior(point)
+        if log_prior == -np.inf:
+            return -np.inf
+        else:
+            return log_prior + self.log_likelihood(point, data=data)
+
+
     def log_prior(self, point, debug=False):
         # this mostly works but the multivariate Dirichlet breaks it
         #logp = 0
@@ -445,7 +449,7 @@ class bayes(bayes_base):
         return logp
 
 
-    def likelihood(self, point, data=None, debug=False):
+    def log_likelihood(self, point, data=None, debug=False):
 
         # predict outcome variable
         y_hat = self.predict(point, data=data, debug=debug)
@@ -463,6 +467,10 @@ class bayes(bayes_base):
             print('y_hat: '+str(y_hat))
             print('logp: '+str(logp))
             print('sumlogp: '+str(np.sum(logp)))
+
+        #print('point='+str(point))
+        #print('log likelihood='+str(np.sum(logp)))
+
 
         # negative log likelihood of entire data set
         return np.sum(logp)
@@ -508,8 +516,8 @@ class bayes(bayes_base):
             )
 
         # extract primary predictor variable from new data
-        print('pname: ' + str(self.x_var))
-        print('data: ' + str(data))
+        #print('pname: ' + str(self.x_var))
+        #print('data: ' + str(data))
         x = data[self.x_var].to_numpy(dtype=float).reshape([-1,1])
         # reconstruct intercept vector
         intercept = np.ones_like(x) * self.segment_dmatrices[0]['Intercept'].to_numpy()[0]
@@ -524,7 +532,6 @@ class bayes(bayes_base):
         cps = np.min(self.data[self.x_var].values) + (np.array(cp_params) * np.ptp(self.data[self.x_var].values))
 
         # for each segment
-        print('num segments: ' +str(self.num_segments))
         for segment in range(self.num_segments):
 
             if debug:
@@ -543,10 +550,7 @@ class bayes(bayes_base):
             effective_x[effective_x < cps[segment]] = 0
 
             # insert intercept if specified
-            print('in segment #' +str(segment))
             if 'Intercept' in self.segment_dmatrices[segment].columns:
-                print('intercept shape: ' +str(intercept.shape))
-                print('effective_x shape: ' +str(effective_x.shape))
                 effective_x = np.hstack([intercept,
                                         effective_x])
             else:
@@ -703,10 +707,6 @@ class bayes_old(bayes_base):
         return param_names
 
 
-    def logp(self, point):
-        return self.log_prior(point) + self.likelihood(point)
-
-
     def set_priors(self, priors=None):
         pass
         if priors is None:
@@ -772,6 +772,10 @@ class bayes_old(bayes_base):
         self.prior = prior
 
 
+    def logp(self, point):
+        return self.log_prior(point) + self.log_likelihood(point)
+
+
     def log_prior(self, point, debug=False):
         # this mostly works but the multivariate Dirichlet breaks it
         #logp = 0
@@ -822,7 +826,7 @@ class bayes_old(bayes_base):
         return logp
 
 
-    def likelihood(self, point, debug=False):
+    def log_likelihood(self, point, debug=False):
 
         # predict outcome variable
         y_hat = self.predict(point, fitting=True, debug=debug)

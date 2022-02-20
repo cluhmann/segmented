@@ -1,5 +1,6 @@
 import pytest
 
+import arviz as az
 import numpy as np
 import pandas as pd
 import segmented as sgmt
@@ -183,9 +184,9 @@ def test_bayes_nonparametric():
     data = pd.DataFrame({'y':rng.random(size=100), 'x':rng.random(size=100)})
     model = sgmt.bayes(['y~1+x', '0+x'], data=data)
     # fit model
-    model.fit()
+    trace = model.fit()
     # summarize the model estimation
-    sgmt.summary(model.trace)
+    az.summary(trace)
 
 
 def test_bayes_parametric():
