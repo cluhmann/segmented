@@ -10,8 +10,6 @@ import arviz
 from multiprocessing import Pool
 from contextlib import nullcontext
 
-
-
 tol = 1e-6
 
 
@@ -210,16 +208,8 @@ class bayes_base:
             self.set_num_segments(len(self.segment_specifications))
 
 
-
-
-
-
-
-
-
-
-
 class bayes(bayes_base):
+
 
     def __init__(self, segments, y_var=None, x_var=None, changepoints=None, priors=None, data=None):
 
@@ -281,9 +271,14 @@ class bayes(bayes_base):
         # TODO: these should probably be informed by/sampled from the prior
         p0 = [0 for i in range(num_sgmt_params)]
         # initial coefficients for changepoint predictors
-        cp_guesses = np.linspace(.25, 1, num=num_cp_params, endpoint=False)
-        # normalize them
-        cp_guesses = cp_guesses / np.sum(cp_guesses)
+        num_points = 2
+        start = 1 / (num_points+1)
+        stop = 1
+        np.linspace(start, 1, num=num_points, endpoint=False)
+        cp_guesses = np.linspace(1/(num_cp_params+1), 1, num=num_cp_params, endpoint=False)
+        #print('num_cp_params: '+str(num_cp_params))
+        #print('cp_guesses: '+str(cp_guesses))
+
         # insert them in the vector of parameters
         p0 += list(cp_guesses)
         # assume a single
@@ -304,8 +299,9 @@ class bayes(bayes_base):
         print(str(len(cp_guesses))+' for the changepoints?')
         print('1 for the error')
         print('num_dims='+str(num_dims))
-        return p0
 
+
+        return p0
 
 
     def gather_parameter_names(self):
@@ -352,6 +348,10 @@ class bayes(bayes_base):
 
         y_sd = np.std(self.data[self.y_var])
         x_range = np.ptp(self.data[self.x_var])
+        #print('y_sd:\t' + str(y_sd))
+        #print('x_range:\t' + str(x_range))
+        #print('SLOPE PRIOR SD:\t' + str(y_sd/x_range))
+        #assert(False)
         prior = []
         # for each segment
         for i,dmat in enumerate(self.segment_dmatrices):
@@ -395,9 +395,12 @@ class bayes(bayes_base):
             data = self.data
         log_prior = self.log_prior(point)
         if log_prior == -np.inf:
+            #print('impossible log prior')
             return -np.inf
         else:
-            return log_prior + self.log_likelihood(point, data=data)
+            log_like = self.log_likelihood(point, data=data)
+            #print('log prior: ' + str(log_prior) + ' log like:' + str(log_like))
+            return log_prior + log_like
 
 
     def log_prior(self, point, debug=False):
@@ -415,10 +418,14 @@ class bayes(bayes_base):
         num_cp_params = sum([len(x.columns) for x in self.changepoint_dmatrices])
         param_idx = 0
         logp = 0
+        #print('logprior:\t' + str(logp))
         # for each segment
         for i in range(num_sgmt_params):
-            logp += self.prior[param_idx].pdf(point[param_idx])
+            logp += self.prior[param_idx].logpdf(point[param_idx])
+            #print('point[param_idx]='+str(point[param_idx])+' type(prior)='+str(self.prior[param_idx].dist)+' logp:\t' + str(logp))
+            #print('params:\t'+str(self.prior[param_idx].kwds))
             param_idx += 1
+
 
         # for each changepoint
         # this currently assumes a set of *non-parametric* changepoints
@@ -433,18 +440,29 @@ class bayes(bayes_base):
         # the first N-1 are the changepoints
         # make sure they don't already sum to > 1
         # nor are any are < 0 or > 1
-        if (sum(cps) > 0) or (min(cps) < 0) or (max(cps) > 1):
+        #print('cps: ' + str(cps))
+        if (sum(cps) < 0) or (min(cps) < 0) or (max(cps) > 1):
             return -np.inf
         # insert the last "x" for the Dirchlet
-        cps += [1 - sum(cps)]
-        logp += self.prior[param_idx].pdf(cps)
+        cps = np.hstack((cps, [1 - sum(cps)]))
+        #print('cps: ' + str(cps))
+        #print('logp of cps: ' + str(self.prior[param_idx].pdf(cps)))
+        logp += self.prior[param_idx].logpdf(cps)
+
+        #print('logprior:\t' + str(logp))
 
         # we should only have the error term left now
-        assert(param_idx + 1 == len(self.prior))
-        assert(param_idx + num_cp_params == len(point))
+        #print('we are on param_idx ' + str(param_idx))
+        #print('there are ' + str(len(self.prior)) + ' priors')
+        assert(param_idx + 1 == len(self.prior)-1)
+        #print('num_cp_params ' + str(num_cp_params))
+        #print('len(point) ' + str(len(point)))
+        assert(param_idx + 1 + num_cp_params == len(point))
 
         # this should be the SD of the error term
-        logp += self.prior[-1].pdf(point[-1])
+        logp += self.prior[-1].logpdf(point[-1])
+
+        #print('logprior:\t' + str(logp))
 
         return logp
 
@@ -478,6 +496,9 @@ class bayes(bayes_base):
 
     def predict(self, params, data=None, debug=False):
 
+        if data is None:
+            data = self.data
+
         params = list(params)
         if debug:
             print('params: ' + str(params))
@@ -487,19 +508,21 @@ class bayes(bayes_base):
         # NOT on the data we are now using for prediction
         # so we need to warn users
         if (data is not None) and (not self.data.equals(data)):
-            warnings.warn('WARNING: model was previously fit, but received data. Using previous observation window (e.g., min(x) and min(x)) to predict().', RuntimeWarning, stacklevel=2)
+            warnings.warn('WARNING: received data that is different than model constructed with.  Using previous observation window (e.g., min(x) and min(x)) to predict().', RuntimeWarning, stacklevel=2)
 
         # for each segment
+        # create a numpy array of parameters
         segment_params = []
         for i,dmat in enumerate(self.segment_dmatrices):
             # for each predictor in specification
-            segment_params += [params.pop(0) for var in dmat.columns]
+            segment_params += [np.array([params.pop(0) for var in dmat.columns])]
 
         # for each changepoint
+        # create a numpy array of parameters
         cp_params = []
         for i,dmat in enumerate(self.changepoint_dmatrices):
             # for each predictor in specification
-            cp_params += [params.pop(0) for var in dmat.columns]
+            cp_params += [np.array([params.pop(0) for var in dmat.columns])]
 
         # this param is not needed here, but should empty the list
         # which permits the subsequent validation
@@ -515,6 +538,11 @@ class bayes(bayes_base):
                 "Received invalid initial parameter value guesses.  Expected " +str(exp_num_params) +" values, received " + str(exp_num_params+len(params)) +"."
             )
 
+        if debug:
+            print('segment params:\t' + str(segment_params))
+            print('cp params:\t' + str(cp_params))
+
+
         # extract primary predictor variable from new data
         #print('pname: ' + str(self.x_var))
         #print('data: ' + str(data))
@@ -525,19 +553,19 @@ class bayes(bayes_base):
         zeros = np.zeros_like(x)
 
         # add in a dummy changepoint at min(x)
-        cp_params = [0] + cp_params
+        cp_params = np.append([0], cp_params)
 
         # untransform changepoints from [0,1] to [min(x), max(x)]
         # but make sure to use the original data's x values to do so
-        cps = np.min(self.data[self.x_var].values) + (np.array(cp_params) * np.ptp(self.data[self.x_var].values))
+        cps = np.min(self.data[self.x_var].values) + (cp_params * np.ptp(self.data[self.x_var].values))
 
         # for each segment
         for segment in range(self.num_segments):
 
             if debug:
                 print('cp_params: ' +str(cp_params))
-                print(self.changepoint_specifications[segment])
-                print(data)
+                #print(self.changepoint_specifications[segment])
+                #print(data)
                 print('cp: ' + str(cps))
                 print(cps.shape)
 
@@ -546,25 +574,22 @@ class bayes(bayes_base):
             #effective_x = x - cps[segment]
             #effective_x = np.clip(effective_x, 0, None)
             # make x values left of segment 0
-            effective_x = x
-            effective_x[effective_x < cps[segment]] = 0
-
-            # insert intercept if specified
-            if 'Intercept' in self.segment_dmatrices[segment].columns:
-                effective_x = np.hstack([intercept,
-                                        effective_x])
-            else:
-                # intercept not requested
-                pass
+            obs_in_segment = x >= cps[segment]
+            effective_x = x - cps[segment]
+            #print('obs in segment')
+            #print(obs_in_segment)
+            effective_x[np.logical_not(obs_in_segment)] = 0
+            effective_x_dmat = self.segment_dmatrices[segment].assign(**{self.x_var:effective_x})
 
             if debug:
                 print('predicting segment #' +str(segment))
-                print('segment params: ' +str(segments_params[segment]))
+                print('segment params: ' +str(segment_params[segment]))
                 print('cp_params: ' +str(cp_params[segment]))
+                print('cp: ' +str(cps[segment]))
                 # broken down for debugging
                 a = data[self.x_var]
                 aprime = cp_params[segment]
-                b = segments_params[segment]
+                b = segment_params[segment]
                 c = effective_x
                 print('xs: ' +str(x))
                 print('eff. xs: ' +str(c))
@@ -575,7 +600,8 @@ class bayes(bayes_base):
                 e = f.reshape([-1,1])
                 print('reshape: ' +str(e))
             else:
-                e = np.sum(segment_params[segment] * effective_x, axis=1).reshape([-1,1])
+                e = np.sum(segment_params[segment] * effective_x_dmat, axis=1).values.reshape([-1,1])
+                #e = np.sum(segment_params[segment] * effective_x, axis=1).reshape([-1,1])
 
             # boolean indicating which datapoints are "in" current segment
             comp = data[self.x_var] < np.squeeze(cps[segment])
@@ -585,12 +611,13 @@ class bayes(bayes_base):
             if debug:
                 print('eshp'+str(e.shape))
                 print('yhtshp'+str(y_hat.shape))
-                print('cpshp'+str(cp.shape))
-                print('cp: '+str(cp))
+                print('cpshp'+str(cps.shape))
+                print('cp: '+str(cps))
                 print('cmpshp'+str(comp.shape))
                 print('cmp: '+str(comp))
                 print('e: ' +str(e))
                 print('y_hatpreupdate: ' +str(y_hat))
+                print('y_hatpostupdate: ' +str(y_hat+temp))
 
             # add predictions to "running" totals
             y_hat = y_hat + temp
