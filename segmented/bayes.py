@@ -252,6 +252,13 @@ class bayes(bayes_base):
                 sampler.reset()
             sampler.run_mcmc(p0, num_samples, progress=True)
 
+        print(
+            "Mean acceptance fraction: {0:.3f}".format(
+                np.mean(sampler.acceptance_fraction)
+            )
+        )
+        #assert(False)
+
         # define variable names, it cannot be inferred from emcee
         var_names = self.gather_parameter_names()
         return arviz.from_emcee(sampler, var_names=var_names)
@@ -386,7 +393,7 @@ class bayes(bayes_base):
         #    # for each predictor in specification
 
         # for each error structure (only 1 right now)
-        prior += [scipy.stats.halfnorm(loc = 0, scale=y_sd)]
+        prior += [scipy.stats.halfnorm(loc = 0, scale=y_sd )]
         self.prior = prior
 
 
@@ -576,10 +583,11 @@ class bayes(bayes_base):
             # make x values left of segment 0
             obs_in_segment = x >= cps[segment]
             effective_x = x - cps[segment]
-            #print('obs in segment')
-            #print(obs_in_segment)
             effective_x[np.logical_not(obs_in_segment)] = 0
             effective_x_dmat = self.segment_dmatrices[segment].assign(**{self.x_var:effective_x})
+
+            # add predictions to "running" totals
+            y_hat += np.sum(segment_params[segment] * effective_x_dmat.values, axis=1)
 
             if debug:
                 print('predicting segment #' +str(segment))
@@ -599,14 +607,11 @@ class bayes(bayes_base):
                 print('sum: ' +str(f))
                 e = f.reshape([-1,1])
                 print('reshape: ' +str(e))
-            else:
-                e = np.sum(segment_params[segment] * effective_x_dmat, axis=1).values.reshape([-1,1])
-                #e = np.sum(segment_params[segment] * effective_x, axis=1).reshape([-1,1])
 
             # boolean indicating which datapoints are "in" current segment
-            comp = data[self.x_var] < np.squeeze(cps[segment])
+            #comp = data[self.x_var] < np.squeeze(cps[segment])
             # mask segment predictions to only appropriate datapoints
-            temp = np.where(comp, np.squeeze(zeros), np.squeeze(e))
+            #temp = np.where(comp, np.squeeze(zeros), np.squeeze(e))
 
             if debug:
                 print('eshp'+str(e.shape))
@@ -615,12 +620,12 @@ class bayes(bayes_base):
                 print('cp: '+str(cps))
                 print('cmpshp'+str(comp.shape))
                 print('cmp: '+str(comp))
+                print('obs_in_segment: '+str(obs_in_segment))
+                print('temp: '+str(temp))
                 print('e: ' +str(e))
                 print('y_hatpreupdate: ' +str(y_hat))
                 print('y_hatpostupdate: ' +str(y_hat+temp))
 
-            # add predictions to "running" totals
-            y_hat = y_hat + temp
 
         return y_hat
 
