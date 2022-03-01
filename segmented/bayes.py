@@ -265,6 +265,50 @@ class bayes(bayes_base):
 
 
     def gen_start_point(self, num_walkers):
+        if True:
+            return self.gen_start_point_byprior(num_walkers)
+        else:
+            return self.gen_start_point_byhand(num_walkers)
+
+    def gen_start_point_byprior(self, num_walkers):
+        # set up the starting point for each parameter and walker
+        param_idx = 0
+        p0 = []
+
+        # for each segment
+        for dmat in self.segment_dmatrices:
+            # for each predictor in specification
+            for var in dmat.columns:
+                #print('p0 len:\t' + str(len(p0)))
+                #print('new prior shape:\t' + str(self.prior[param_idx].rvs(size=num_walkers).shape))
+                p0 += [self.prior[param_idx].rvs(size=num_walkers)]
+                param_idx += 1
+
+        # for each changepoint
+        cps = self.prior[param_idx].rvs(size=num_walkers)
+        cps = np.delete(cps, -1, axis=1)
+        #print('p0 type:\t' + str(type(p0)))
+        #print('p0 len:\t' + str(len(p0)))
+        #print('CPS type:\t' + str(type(cps)))
+        #print('CPS shape:\t' + str(cps.T.shape))
+        p0 += [cps.ravel()]
+        #p0 += cps.T
+        param_idx += 1
+
+
+        # for each error structure (only 1 right now)
+        p0 += [self.prior[param_idx].rvs(size=num_walkers)]
+        param_idx += 1
+        #print('pidx:\t'+str(param_idx))
+        #print('n priors:\t' + str(len(self.prior)))
+        #print('n segments:\t' + str(self.num_segments))
+        #print('p0 len:\t' + str(len(p0)))
+        # number of priors + 1 
+        assert(param_idx == len(self.prior))
+
+        return np.array(p0).T
+
+    def gen_start_point_byhand(self, num_walkers):
 
         # set up the starting point for each parameter and walker
         num_sgmt_params = sum([len(x.columns) for x in self.segment_dmatrices])
@@ -337,21 +381,18 @@ class bayes(bayes_base):
         if priors is None:
             self.__set_data_informed_priors()
         else:
-            # TODO
-            # the plan is to accept frozen scipy distributions
+            # accept a list of frozen scipy distributions
             # e.g., scipy.stats.norm(loc=10, scale=3.7)
             # the pdfs of these frozen distributions can then be used
             # to generate log priors at sampled locations during sampling
-            pass
-
+            self.prior = priors
 
     def __set_data_informed_priors(self):
-        # TODO
         # construct priors based on the data we have in self.data
         # intercepts ~ t(loc = 0, scale = 3 * sd(y), nu = 3)
         # slopes ~ t(loc = 0, scale = sd(y)/(max(x) − min(x)), nu = 3)
-        # changepoints?
-        # epsilon ~ gamma?
+        # changepoints ~ dirichlet([1] * (num_segments-1) )
+        # epsilon ~ halfnormal(scale = sd(y))
 
         y_sd = np.std(self.data[self.y_var])
         x_range = np.ptp(self.data[self.x_var])
