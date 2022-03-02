@@ -7,3 +7,4 @@ emcee>=3.0.0
 sphinx>=1.5
 pytest>=3.0
 m2r2
+ghp-import
