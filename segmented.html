@@ -1,0 +1,338 @@
+
+<!DOCTYPE html>
+
+<html>
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" /><meta name="generator" content="Docutils 0.17.1: http://docutils.sourceforge.net/" />
+
+    <title>segmented package &#8212; segmented 0.0.4 documentation</title>
+    <link rel="stylesheet" type="text/css" href="_static/pygments.css" />
+    <link rel="stylesheet" type="text/css" href="_static/alabaster.css" />
+    <script data-url_root="./" id="documentation_options" src="_static/documentation_options.js"></script>
+    <script src="_static/jquery.js"></script>
+    <script src="_static/underscore.js"></script>
+    <script src="_static/doctools.js"></script>
+    <link rel="index" title="Index" href="genindex.html" />
+    <link rel="search" title="Search" href="search.html" />
+   
+  <link rel="stylesheet" href="_static/custom.css" type="text/css" />
+  
+  
+  <meta name="viewport" content="width=device-width, initial-scale=0.9, maximum-scale=0.9" />
+
+  </head><body>
+  
+
+    <div class="document">
+      <div class="documentwrapper">
+          
+
+          <div class="body" role="main">
+            
+  <section id="segmented-package">
+<h1>segmented package<a class="headerlink" href="#segmented-package" title="Permalink to this headline">¶</a></h1>
+<section id="submodules">
+<h2>Submodules<a class="headerlink" href="#submodules" title="Permalink to this headline">¶</a></h2>
+</section>
+<section id="module-segmented.demo">
+<span id="segmented-demo-module"></span><h2>segmented.demo module<a class="headerlink" href="#module-segmented.demo" title="Permalink to this headline">¶</a></h2>
+<dl class="py class">
+<dt class="sig sig-object py" id="segmented.demo.demo">
+<em class="property"><span class="pre">class</span><span class="w"> </span></em><span class="sig-prename descclassname"><span class="pre">segmented.demo.</span></span><span class="sig-name descname"><span class="pre">demo</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">data</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">par_y</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">'y'</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">par_x</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">'x'</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">par_z</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">'z'</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#segmented.demo.demo" title="Permalink to this definition">¶</a></dt>
+<dd><p>Bases: <code class="xref py py-class docutils literal notranslate"><span class="pre">object</span></code></p>
+<p>This class is used for illustrative and replication purposes.  This object embodies a segmented regression model with parametric node placement.  The  specification of both the segmented regression model itself and the specification of the parametric node placement are log-linear with Poisson error structures and assumes a single node (i.e., two segments):</p>
+<p>mu_Y = exp(B_0 + (B_1 * X) + (B_2 * (X - exp(g_0 + (g_1 * Z)))))</p>
+<p>This specification has five parameters: B_0, B_1, B_2, g_1, and g_2.  B_0 is the intercept, B_1 is the slope of the first segment, B_2 is the change in slope occuring at the node.  The placement of the node is parametric, with its specification including an intercept, g_0, and a slope, g_1, relating Z and node placement.</p>
+<p>Please note that this model, unlike Luhmann &amp; Clouston, assumes that T_0, the degenerate node at the “left-most” end of the model, is zero.  The model used here, in which T_0 = 0, means that the intercept, B_0, will be defined relative to the orgin (as in conventional regression).  Luhmann &amp; Clouston assume that T_0 = min(X), which meant that B_0 was instead “intercept-like” and insensitive to the distribution of X.  For this reason, the demo object should only be applied to data with strictly positive values of X.</p>
+<dl>
+<dt>Args:</dt><dd><p>data (dataframe): Data to be used for estimation.  Columns contain relevant variables (i.e., outcome, predictor, co-variable).</p>
+<p>par_y (str): Name of dataframe column corresponding to the variable outcome.</p>
+<p>par_x (str): Name of dataframe column corresponding to the primary predictor variable.</p>
+<p>par_z (str): Name of dataframe column corresponding to the co-variable that is (assumed to be) related to the parametric node placements.</p>
+</dd>
+</dl>
+<dl class="py method">
+<dt class="sig sig-object py" id="segmented.demo.demo.change_point">
+<span class="sig-name descname"><span class="pre">change_point</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">params</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">data</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">mean</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">False</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#segmented.demo.demo.change_point" title="Permalink to this definition">¶</a></dt>
+<dd></dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="segmented.demo.demo.fit">
+<span class="sig-name descname"><span class="pre">fit</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">x0</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">bounds</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#segmented.demo.demo.fit" title="Permalink to this definition">¶</a></dt>
+<dd><p>Estimate model parameters.  Note that this function may take quite some time to execute because it currently uses scipy’s differential_evolution procedure.</p>
+<dl>
+<dt>Args:</dt><dd><p>x0 (list-like): This argument is currently ignored.  Initial guess. Array of real elements of size (5,).  The entries of this array correspond to: [B_0, B_1, B_2, g_0, g_1].  See documentation of <a class="reference internal" href="#segmented.demo.demo" title="segmented.demo.demo"><code class="xref py py-class docutils literal notranslate"><span class="pre">demo</span></code></a> for further details.</p>
+<p>bounds (list-like): This argument is currently required.  Each component bounds should be a tuple of the form (min, max). The fit method uses these to constrain the search for likely parameter values.  The entries of tuples should correspond to: [(B_0_min, B_0_max), (B_1_min, B_1_max), (B_2_min, B_2_max), (g_0_min, g_0_max), (g_1_min, g_1_max)].</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="segmented.demo.demo.model_logp">
+<span class="sig-name descname"><span class="pre">model_logp</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">params</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">data</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#segmented.demo.demo.model_logp" title="Permalink to this definition">¶</a></dt>
+<dd></dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="segmented.demo.demo.model_mean">
+<span class="sig-name descname"><span class="pre">model_mean</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">params</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">data</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#segmented.demo.demo.model_mean" title="Permalink to this definition">¶</a></dt>
+<dd></dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="segmented.demo.demo.set_data">
+<span class="sig-name descname"><span class="pre">set_data</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">data</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#segmented.demo.demo.set_data" title="Permalink to this definition">¶</a></dt>
+<dd><p>A method to set the data object.</p>
+<dl class="simple">
+<dt>Args:</dt><dd><p>data (dataframe): Data to use for estimation.  Columns contain relevant variables.</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="segmented.demo.demo.summary">
+<span class="sig-name descname"><span class="pre">summary</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="headerlink" href="#segmented.demo.demo.summary" title="Permalink to this definition">¶</a></dt>
+<dd><p>Summarize the optimization procedure.  Currently returns a scipy.optimize.OptimizeResult object.</p>
+</dd></dl>
+
+</dd></dl>
+
+</section>
+<section id="module-segmented.segmented">
+<span id="segmented-segmented-module"></span><h2>segmented.segmented module<a class="headerlink" href="#module-segmented.segmented" title="Permalink to this headline">¶</a></h2>
+<p>Class implementing segmented regression.</p>
+<p>…</p>
+<section id="attributes">
+<h3>Attributes<a class="headerlink" href="#attributes" title="Permalink to this headline">¶</a></h3>
+<dl class="simple">
+<dt>models<span class="classifier">list</span></dt><dd><p>List of model specifications in patsy format.</p>
+</dd>
+<dt>data<span class="classifier">Pandas Dataframe</span></dt><dd><p>Data to be modeled.</p>
+</dd>
+<dt>num_segments: int</dt><dd><p>Number of segments to be modeled.</p>
+</dd>
+<dt>num_segments: int</dt><dd><p>Number of segments to be modeled.</p>
+</dd>
+<dt>segment_specifications: list</dt><dd><p>List of patsy strings specifying the segment models.</p>
+</dd>
+<dt>outcome_var_name: str</dt><dd><p>Name of column from self.data representing the outcome.</p>
+</dd>
+<dt>outcome_dmatrix: dataframe</dt><dd><p>Column reflecting representing the outcome.  Will be a column from
+self.data or a transformation thereof (depending on specification).</p>
+</dd>
+<dt>segment_dmatrices: list</dt><dd><p>List of dataframes, each reflecting aspects of self.data relevant
+to the corresponding segment.</p>
+</dd>
+<dt>changepoint_specifications: list</dt><dd><p>List of patsy strings specifying the changepoint models.</p>
+</dd>
+<dt>changepoint_dmatrices: list</dt><dd><p>List of dataframes, each reflecting aspects of self.data relevant
+to the corresponding segment.</p>
+</dd>
+<dt>nodes_parametric: bool</dt><dd><p>Flag indicating whether changepoints are parametric.</p>
+</dd>
+<dt>segment_coefs: list</dt><dd><p>List of estimated parameter values.  Each entry will be a list of
+values associated with the corresponding segment specification.</p>
+</dd>
+<dt>changepoint_coefs: list</dt><dd><p>List of changepoints (if nodes_parametric==False) or a list of
+changepoint-related parameter values (if nodes_parametric==True).</p>
+</dd>
+<dt>result: scipy.optimize.OptimizeResult</dt><dd><p>Information about the results generated by calling fit().</p>
+</dd>
+</dl>
+</section>
+<section id="methods">
+<h3>Methods<a class="headerlink" href="#methods" title="Permalink to this headline">¶</a></h3>
+<dl class="simple">
+<dt>set_models(models, validate=False)</dt><dd><p>Set the segment specification(s).</p>
+</dd>
+<dt>set_data(data, validate=False)</dt><dd><p>Set the data to be modeled.</p>
+</dd>
+<dt>set_num_segments(num_segments, validate=False)</dt><dd><p>Set the number of segments.</p>
+</dd>
+<dt>validate_parameters()</dt><dd><p>Validate the object’s current parameter values.</p>
+</dd>
+<dt>fit(x0)</dt><dd><p>Estimate model parameters using x0 as the initial parameter values.
+If changepoints are parameteric, fit() will accept optional keyword
+arguments that will be passed to scipy.optimize.minimize (e.g.,
+“method=’BFGS’” or “maxiter=5_000”).</p>
+</dd>
+<dt>predict(self, data, params=None)</dt><dd><p>Use data to make predictions.  If params argument is not passed,
+previously estimated parameter values will be used.</p>
+</dd>
+<dt>summary()</dt><dd><p>Provide information regarding the parameter estimation procedure.
+Currently just returns self.result.</p>
+</dd>
+</dl>
+</section>
+</section>
+<section id="module-segmented.bayes">
+<span id="segmented-bayes-module"></span><h2>segmented.bayes module<a class="headerlink" href="#module-segmented.bayes" title="Permalink to this headline">¶</a></h2>
+<dl class="py class">
+<dt class="sig sig-object py" id="segmented.bayes.bayes">
+<em class="property"><span class="pre">class</span><span class="w"> </span></em><span class="sig-prename descclassname"><span class="pre">segmented.bayes.</span></span><span class="sig-name descname"><span class="pre">bayes</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">segments</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">y_var</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">x_var</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">changepoints</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">priors</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">data</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#segmented.bayes.bayes" title="Permalink to this definition">¶</a></dt>
+<dd><p>Bases: <a class="reference internal" href="#segmented.bayes.bayes_base" title="segmented.bayes.bayes_base"><code class="xref py py-class docutils literal notranslate"><span class="pre">segmented.bayes.bayes_base</span></code></a></p>
+<dl class="py method">
+<dt class="sig sig-object py" id="segmented.bayes.bayes.fit">
+<span class="sig-name descname"><span class="pre">fit</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">num_samples</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">500</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">num_burnin</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">200</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">num_walkers</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">30</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">num_cores</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#segmented.bayes.bayes.fit" title="Permalink to this definition">¶</a></dt>
+<dd></dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="segmented.bayes.bayes.gather_parameter_names">
+<span class="sig-name descname"><span class="pre">gather_parameter_names</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="headerlink" href="#segmented.bayes.bayes.gather_parameter_names" title="Permalink to this definition">¶</a></dt>
+<dd></dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="segmented.bayes.bayes.gen_start_point">
+<span class="sig-name descname"><span class="pre">gen_start_point</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">num_walkers</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#segmented.bayes.bayes.gen_start_point" title="Permalink to this definition">¶</a></dt>
+<dd></dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="segmented.bayes.bayes.gen_start_point_byhand">
+<span class="sig-name descname"><span class="pre">gen_start_point_byhand</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">num_walkers</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#segmented.bayes.bayes.gen_start_point_byhand" title="Permalink to this definition">¶</a></dt>
+<dd></dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="segmented.bayes.bayes.gen_start_point_byprior">
+<span class="sig-name descname"><span class="pre">gen_start_point_byprior</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">num_walkers</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#segmented.bayes.bayes.gen_start_point_byprior" title="Permalink to this definition">¶</a></dt>
+<dd></dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="segmented.bayes.bayes.log_likelihood">
+<span class="sig-name descname"><span class="pre">log_likelihood</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">point</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">data</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">debug</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">False</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#segmented.bayes.bayes.log_likelihood" title="Permalink to this definition">¶</a></dt>
+<dd></dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="segmented.bayes.bayes.log_prior">
+<span class="sig-name descname"><span class="pre">log_prior</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">point</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">debug</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">False</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#segmented.bayes.bayes.log_prior" title="Permalink to this definition">¶</a></dt>
+<dd></dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="segmented.bayes.bayes.logp">
+<span class="sig-name descname"><span class="pre">logp</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">point</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">data</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#segmented.bayes.bayes.logp" title="Permalink to this definition">¶</a></dt>
+<dd></dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="segmented.bayes.bayes.predict">
+<span class="sig-name descname"><span class="pre">predict</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">params</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">data</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">debug</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">False</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#segmented.bayes.bayes.predict" title="Permalink to this definition">¶</a></dt>
+<dd></dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="segmented.bayes.bayes.sample_posterior_predictive">
+<span class="sig-name descname"><span class="pre">sample_posterior_predictive</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">idata</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#segmented.bayes.bayes.sample_posterior_predictive" title="Permalink to this definition">¶</a></dt>
+<dd></dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="segmented.bayes.bayes.set_priors">
+<span class="sig-name descname"><span class="pre">set_priors</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">priors</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#segmented.bayes.bayes.set_priors" title="Permalink to this definition">¶</a></dt>
+<dd></dd></dl>
+
+</dd></dl>
+
+<dl class="py class">
+<dt class="sig sig-object py" id="segmented.bayes.bayes_base">
+<em class="property"><span class="pre">class</span><span class="w"> </span></em><span class="sig-prename descclassname"><span class="pre">segmented.bayes.</span></span><span class="sig-name descname"><span class="pre">bayes_base</span></span><a class="headerlink" href="#segmented.bayes.bayes_base" title="Permalink to this definition">¶</a></dt>
+<dd><p>Bases: <code class="xref py py-class docutils literal notranslate"><span class="pre">object</span></code></p>
+<dl class="py method">
+<dt class="sig sig-object py" id="segmented.bayes.bayes_base.set_changepoints">
+<span class="sig-name descname"><span class="pre">set_changepoints</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">changepoints</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">validate</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">True</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#segmented.bayes.bayes_base.set_changepoints" title="Permalink to this definition">¶</a></dt>
+<dd></dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="segmented.bayes.bayes_base.set_data">
+<span class="sig-name descname"><span class="pre">set_data</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">data</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">validate</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">True</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#segmented.bayes.bayes_base.set_data" title="Permalink to this definition">¶</a></dt>
+<dd></dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="segmented.bayes.bayes_base.set_num_segments">
+<span class="sig-name descname"><span class="pre">set_num_segments</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">num_segments</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">validate</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">True</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#segmented.bayes.bayes_base.set_num_segments" title="Permalink to this definition">¶</a></dt>
+<dd></dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="segmented.bayes.bayes_base.set_segments">
+<span class="sig-name descname"><span class="pre">set_segments</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">specs</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">y_var</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">x_var</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">validate</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">True</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#segmented.bayes.bayes_base.set_segments" title="Permalink to this definition">¶</a></dt>
+<dd></dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="segmented.bayes.bayes_base.validate_parameters">
+<span class="sig-name descname"><span class="pre">validate_parameters</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="headerlink" href="#segmented.bayes.bayes_base.validate_parameters" title="Permalink to this definition">¶</a></dt>
+<dd></dd></dl>
+
+</dd></dl>
+
+<dl class="py class">
+<dt class="sig sig-object py" id="segmented.bayes.bayes_old">
+<em class="property"><span class="pre">class</span><span class="w"> </span></em><span class="sig-prename descclassname"><span class="pre">segmented.bayes.</span></span><span class="sig-name descname"><span class="pre">bayes_old</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">segments</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">y_var</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">x_var</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">changepoints</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">priors</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">data</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#segmented.bayes.bayes_old" title="Permalink to this definition">¶</a></dt>
+<dd><p>Bases: <a class="reference internal" href="#segmented.bayes.bayes_base" title="segmented.bayes.bayes_base"><code class="xref py py-class docutils literal notranslate"><span class="pre">segmented.bayes.bayes_base</span></code></a></p>
+<dl class="py method">
+<dt class="sig sig-object py" id="segmented.bayes.bayes_old.fit">
+<span class="sig-name descname"><span class="pre">fit</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">num_samples</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">1000</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">num_burnin</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">200</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">num_walkers</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">30</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">num_cores</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#segmented.bayes.bayes_old.fit" title="Permalink to this definition">¶</a></dt>
+<dd></dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="segmented.bayes.bayes_old.gather_parameter_names">
+<span class="sig-name descname"><span class="pre">gather_parameter_names</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="headerlink" href="#segmented.bayes.bayes_old.gather_parameter_names" title="Permalink to this definition">¶</a></dt>
+<dd></dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="segmented.bayes.bayes_old.gen_start_point">
+<span class="sig-name descname"><span class="pre">gen_start_point</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">num_walkers</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#segmented.bayes.bayes_old.gen_start_point" title="Permalink to this definition">¶</a></dt>
+<dd></dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="segmented.bayes.bayes_old.log_likelihood">
+<span class="sig-name descname"><span class="pre">log_likelihood</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">point</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">debug</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">False</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#segmented.bayes.bayes_old.log_likelihood" title="Permalink to this definition">¶</a></dt>
+<dd></dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="segmented.bayes.bayes_old.log_prior">
+<span class="sig-name descname"><span class="pre">log_prior</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">point</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">debug</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">False</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#segmented.bayes.bayes_old.log_prior" title="Permalink to this definition">¶</a></dt>
+<dd></dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="segmented.bayes.bayes_old.logp">
+<span class="sig-name descname"><span class="pre">logp</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">point</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#segmented.bayes.bayes_old.logp" title="Permalink to this definition">¶</a></dt>
+<dd></dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="segmented.bayes.bayes_old.predict">
+<span class="sig-name descname"><span class="pre">predict</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">params</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">data</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">fitting</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">False</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">debug</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">False</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#segmented.bayes.bayes_old.predict" title="Permalink to this definition">¶</a></dt>
+<dd></dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="segmented.bayes.bayes_old.set_priors">
+<span class="sig-name descname"><span class="pre">set_priors</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">priors</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#segmented.bayes.bayes_old.set_priors" title="Permalink to this definition">¶</a></dt>
+<dd></dd></dl>
+
+</dd></dl>
+
+</section>
+<section id="module-segmented.version">
+<span id="segmented-version-module"></span><h2>segmented.version module<a class="headerlink" href="#module-segmented.version" title="Permalink to this headline">¶</a></h2>
+</section>
+<section id="module-segmented">
+<span id="module-contents"></span><h2>Module contents<a class="headerlink" href="#module-segmented" title="Permalink to this headline">¶</a></h2>
+</section>
+</section>
+
+
+          </div>
+          
+      </div>
+      <div class="clearer"></div>
+    </div>
+    <div class="footer">
+      &copy;2021, Christian C. Luhmann.
+      
+      |
+      Powered by <a href="http://sphinx-doc.org/">Sphinx 4.4.0</a>
+      &amp; <a href="https://github.com/bitprophet/alabaster">Alabaster 0.7.12</a>
+      
+      |
+      <a href="_sources/segmented.rst.txt"
+          rel="nofollow">Page source</a>
+    </div>
+
+    
+
+    
+  </body>
+</html>

@@ -1,0 +1,286 @@
+
+<!DOCTYPE html>
+
+<html>
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" /><meta name="generator" content="Docutils 0.17.1: http://docutils.sourceforge.net/" />
+
+    <title>segmented &#8212; segmented 0.0.4 documentation</title>
+    <link rel="stylesheet" type="text/css" href="_static/pygments.css" />
+    <link rel="stylesheet" type="text/css" href="_static/alabaster.css" />
+    <script data-url_root="./" id="documentation_options" src="_static/documentation_options.js"></script>
+    <script src="_static/jquery.js"></script>
+    <script src="_static/underscore.js"></script>
+    <script src="_static/doctools.js"></script>
+    <link rel="index" title="Index" href="genindex.html" />
+    <link rel="search" title="Search" href="search.html" />
+   
+  <link rel="stylesheet" href="_static/custom.css" type="text/css" />
+  
+  
+  <meta name="viewport" content="width=device-width, initial-scale=0.9, maximum-scale=0.9" />
+
+  </head><body>
+  
+
+    <div class="document">
+      <div class="documentwrapper">
+          
+
+          <div class="body" role="main">
+            
+  <section id="segmented">
+<h1>segmented<a class="headerlink" href="#segmented" title="Permalink to this headline">¶</a></h1>
+<p>segmented is a Python toolbox for performing segmented regression, with an initial focus on characterizing parametric changepoints.  The <code class="docutils literal notranslate"><span class="pre">segmented.demo</span></code> class is for demonstration and replication purposes only (please <a class="reference external" href="#demo">see here</a> for details).  The <code class="docutils literal notranslate"><span class="pre">segmented.segmented</span></code> class provides the core functionality.  This class currently permits connected, parametric segmented linear regression models with identity link functions.  The <code class="docutils literal notranslate"><span class="pre">segmented.bayes</span></code> class permits Bayesian estimation of these same models. Eventually, the package will permit alternative link functions and other more flexible models to be specified.</p>
+<p><a class="reference external" href="#install">Installation</a><span class="raw-html-m2r"><br></span>
+<a class="reference external" href="#segmented-class">Segmented class</a><span class="raw-html-m2r"><br></span>
+<a class="reference external" href="#bayes">Bayes class</a><span class="raw-html-m2r"><br></span>
+<a class="reference external" href="#demo">Demo class</a></p>
+<section id="installation-a-name-install">
+<h2>Installation <span class="raw-html-m2r"><a name="install"></span><a class="headerlink" href="#installation-a-name-install" title="Permalink to this headline">¶</a></h2>
+<p>segmented is written for Python 3.7+.  The latest release of segmented can be installed from PyPI using pip:</p>
+<div class="highlight-default notranslate"><div class="highlight"><pre><span></span><span class="n">pip</span> <span class="n">install</span> <span class="n">segmented</span>
+</pre></div>
+</div>
+</section>
+<section id="segmented-class-a-name-segmented-class">
+<h2>Segmented Class <span class="raw-html-m2r"><a name="segmented-class"></span><a class="headerlink" href="#segmented-class-a-name-segmented-class" title="Permalink to this headline">¶</a></h2>
+<p>Here, we briefly outline the functionality of the <code class="docutils literal notranslate"><span class="pre">segmented.segmented</span></code> class.  This class is intended to be the workhorse class of the segmented package.  This class currently permits the construction of segmented linear regression models that are a) connected, b) parametric (or non-parametric), and c) have identity link functions, and d) Gaussian noise.  Future releases will relax these requirements (see below).</p>
+<p>Let’s see an example.  In what follows, we assume the following initial imports.  These are, coincidentally, (most of) the packages required by segmented:</p>
+<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="kn">import</span> <span class="nn">pandas</span> <span class="k">as</span> <span class="nn">pd</span>
+<span class="kn">import</span> <span class="nn">numpy</span> <span class="k">as</span> <span class="nn">np</span>
+<span class="kn">import</span> <span class="nn">scipy.stats</span>
+
+<span class="kn">import</span> <span class="nn">segmented</span> <span class="k">as</span> <span class="nn">sgmt</span>
+</pre></div>
+</div>
+<p>Let’s take a look at how the class works.  We’ll start with a segmented regression model with a <strong>non-parametric</strong> changepoint.</p>
+<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="n">x</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">array</span><span class="p">([</span><span class="mi">0</span><span class="p">,</span><span class="mi">1</span><span class="p">,</span><span class="mi">2</span><span class="p">,</span><span class="mi">3</span><span class="p">,</span><span class="mi">4</span><span class="p">,</span><span class="mi">5</span><span class="p">,</span><span class="mi">6</span><span class="p">,</span><span class="mi">7</span><span class="p">,</span><span class="mi">8</span><span class="p">,</span><span class="mi">9</span><span class="p">])</span>
+<span class="n">y</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">array</span><span class="p">([</span><span class="mi">0</span><span class="p">,</span><span class="mi">0</span><span class="p">,</span><span class="mi">0</span><span class="p">,</span><span class="mi">0</span><span class="p">,</span><span class="mi">0</span><span class="p">,</span><span class="mi">0</span><span class="p">,</span><span class="mi">1</span><span class="p">,</span><span class="mi">2</span><span class="p">,</span><span class="mi">3</span><span class="p">,</span><span class="mi">4</span><span class="p">])</span>
+<span class="n">data</span> <span class="o">=</span> <span class="n">pd</span><span class="o">.</span><span class="n">DataFrame</span><span class="p">({</span><span class="s1">&#39;x&#39;</span><span class="p">:</span><span class="n">x</span><span class="p">,</span> <span class="s1">&#39;y&#39;</span><span class="p">:</span><span class="n">y</span><span class="p">})</span>
+
+
+<span class="c1"># construct a model</span>
+<span class="n">model</span> <span class="o">=</span> <span class="n">sgmt</span><span class="o">.</span><span class="n">segmented</span><span class="p">([</span><span class="s1">&#39;y~1+x&#39;</span><span class="p">,</span> <span class="s1">&#39;0+x&#39;</span><span class="p">],</span> <span class="n">data</span><span class="o">=</span><span class="n">data</span><span class="p">)</span>
+
+<span class="c1"># estimate parameter values</span>
+<span class="n">model</span><span class="o">.</span><span class="n">fit</span><span class="p">([</span><span class="mi">7</span><span class="p">])</span>
+
+<span class="c1"># check out result</span>
+<span class="nb">print</span><span class="p">(</span><span class="n">model</span><span class="o">.</span><span class="n">summary</span><span class="p">())</span>
+</pre></div>
+</div>
+<p>Let’s look at what we have here.  We first generate some data and then construct our model by calling <code class="docutils literal notranslate"><span class="pre">sgmt.segmented()</span></code>.  We then estimate the parameters of our model by calling <code class="docutils literal notranslate"><span class="pre">fit()</span></code> and finally we inspect the results by calling <code class="docutils literal notranslate"><span class="pre">summary()</span></code>.  Let’s take a closer look at the model specification step.</p>
+<p>The first argument to <code class="docutils literal notranslate"><span class="pre">sgmt.segmented()</span></code> is a list of <a class="reference external" href="https://github.com/pydata/patsy">patsy</a> strings, each providing a specification for a separate segment of our model.  This listof segment specifications is always the first argument.  The second, named argument is the data we are modeling and must come in the form of a <a class="reference external" href="https://pandas.pydata.org/docs">pandas dataframe</a>.  In this example we have provided 2-segment specification.</p>
+<p>Every segment in our segmented regression model, <strong>including the first</strong>, consists of what we refer to as a <em>node</em> at the beginning (left edge) of the segment and a line that spans the interval between that segment’s node (i.e., to the left) and the node associated with the next segment (i.e., to the right).  The first segment begins at with a node at x=min(x) that we will call x=T1.  The second segment begins with a node that marks the point at which the two segments are connected.  We refer to this point as x=T2.</p>
+<p>The first segment specification provides 2 important pieces of information about our model.  First, it instructs <code class="docutils literal notranslate"><span class="pre">segmented</span></code> to treat <code class="docutils literal notranslate"><span class="pre">data['y']</span></code> as the outcome variable.  Second, it indicates that an intercept-like term will be estimated (cf. <code class="docutils literal notranslate"><span class="pre">'y~0+x'</span></code>).  Specifically, we estimate an offset, B0, such that y = f(T1) = f(min(x)) = B0.</p>
+<p>The second item in the specification list describes the second segment and is a bit different.  There are two details in particular that are worth highlighting.</p>
+<p>First, we explicitly omit an intercept by including the <code class="docutils literal notranslate"><span class="pre">0</span></code> in <code class="docutils literal notranslate"><span class="pre">'~0+x'</span></code>.  This means that <code class="docutils literal notranslate"><span class="pre">segmented()</span></code> will construct <em>connected</em> segments.  If we had instead included an intercept in these segment definitions (e.g., <code class="docutils literal notranslate"><span class="pre">'~1+x'</span></code> or, more implicitly, <code class="docutils literal notranslate"><span class="pre">'~x'</span></code>), we would instead permit the model to construct a <em>disconnected</em> model in which the segments need not meet at each node (not yet implemented).</p>
+<p>Second, we have omitted the outcome variable (i.e., y) from the left-hand side of the second segment’s specification. This is because, unlike the first segment’s specification, the second segment’s specification <strong>does not</strong> describe the relationship between the outcome variable and the predictor (at least not in a straightforward sense).  Instead, the second segment’s specification describes how we wish the <em>difference</em> between the first segment and the second segment to be modeled.  The segment specification we provided suggests that the change occurring at the that segment’s node (i.e., to the left) can be described by a simple change in (linear) slope (as a function of <code class="docutils literal notranslate"><span class="pre">data['x']</span></code>).  Thus, for each segment, there will be a single slope (coefficient) estimated for each segment: B1 for the first segment and B2 for the second segment.  The first segment will work a bit like conventional linear regression: y = B0 + B1 (x - T1).  However, within the second segment, y = B0 + B1 (x - T1) + B2 (x - T2)+.  Here, the (x - T2)+ = x - T2 if x &gt; T2 and 0 otherwise.</p>
+<p>We then call <code class="docutils literal notranslate"><span class="pre">fit()</span></code> and pass it a list of guesses about where the changepoints might be.  Because we have specified a model with 2 segements, we provide a list consisting of a guess aboute the single changepoint (i.e., <code class="docutils literal notranslate"><span class="pre">[7]</span></code>).</p>
+<p>Finally, we inspect the results by calling <code class="docutils literal notranslate"><span class="pre">summary()</span></code>.  This will provide a variety of details regarding the optimization procedure.</p>
+<p>Now let’s take a look at a segmented regression model with a <strong>parametric</strong> changepoint.</p>
+<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="c1"># generate some data</span>
+<span class="n">x</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">array</span><span class="p">([</span><span class="mi">0</span><span class="p">,</span><span class="mi">1</span><span class="p">,</span><span class="mi">2</span><span class="p">,</span><span class="mi">3</span><span class="p">,</span><span class="mi">4</span><span class="p">,</span><span class="mi">5</span><span class="p">,</span><span class="mi">6</span><span class="p">,</span><span class="mi">7</span><span class="p">,</span><span class="mi">8</span><span class="p">,</span><span class="mi">9</span><span class="p">])</span>
+<span class="n">b</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">array</span><span class="p">([</span><span class="mi">0</span><span class="p">,</span><span class="mi">1</span><span class="p">,</span><span class="o">-</span><span class="mi">1</span><span class="p">])</span>
+<span class="n">cp</span> <span class="o">=</span> <span class="p">[</span><span class="mi">2</span><span class="p">,</span><span class="mi">0</span><span class="p">]</span>
+<span class="n">y</span> <span class="o">=</span> <span class="n">b</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span> <span class="o">+</span> <span class="p">(</span><span class="n">b</span><span class="p">[</span><span class="mi">1</span><span class="p">]</span> <span class="o">*</span> <span class="n">x</span><span class="p">)</span>
+<span class="n">y</span><span class="o">+=</span> <span class="p">(</span><span class="n">b</span><span class="p">[</span><span class="mi">2</span><span class="p">]</span> <span class="o">*</span> <span class="n">np</span><span class="o">.</span><span class="n">clip</span><span class="p">(</span><span class="n">x</span><span class="o">-</span><span class="n">cp</span><span class="p">[</span><span class="mi">0</span><span class="p">],</span> <span class="mi">0</span><span class="p">,</span> <span class="kc">None</span><span class="p">))</span>
+<span class="n">z</span> <span class="o">=</span> <span class="n">cp</span><span class="p">[</span><span class="mi">1</span><span class="p">]</span> <span class="o">*</span> <span class="n">np</span><span class="o">.</span><span class="n">ones_like</span><span class="p">(</span><span class="n">x</span><span class="p">)</span> <span class="c1"># not used</span>
+<span class="n">data</span> <span class="o">=</span> <span class="n">pd</span><span class="o">.</span><span class="n">DataFrame</span><span class="p">({</span><span class="s1">&#39;x&#39;</span><span class="p">:</span><span class="n">x</span><span class="p">,</span> <span class="s1">&#39;y&#39;</span><span class="p">:</span><span class="n">y</span><span class="p">,</span> <span class="s1">&#39;z&#39;</span><span class="p">:</span><span class="n">z</span><span class="p">})</span>
+
+<span class="c1"># construct a model</span>
+<span class="n">model</span> <span class="o">=</span> <span class="n">sgmt</span><span class="o">.</span><span class="n">segmented</span><span class="p">([</span><span class="s1">&#39;y~1+x&#39;</span><span class="p">,</span> <span class="s1">&#39;0+x&#39;</span><span class="p">],</span> <span class="n">changepoints</span><span class="o">=</span><span class="p">[</span><span class="s1">&#39;1+z&#39;</span><span class="p">],</span> <span class="n">data</span><span class="o">=</span><span class="n">data</span><span class="p">)</span>
+
+<span class="c1"># estimate parameter values</span>
+<span class="n">model</span><span class="o">.</span><span class="n">fit</span><span class="p">([</span><span class="mi">0</span><span class="p">,</span> <span class="mi">0</span><span class="p">,</span> <span class="mi">0</span><span class="p">,</span> <span class="n">data</span><span class="p">[</span><span class="s1">&#39;x&#39;</span><span class="p">]</span><span class="o">.</span><span class="n">median</span><span class="p">(),</span> <span class="mi">0</span><span class="p">,</span> <span class="mi">1</span><span class="p">])</span>
+
+<span class="c1"># check out result</span>
+<span class="nb">print</span><span class="p">(</span><span class="n">model</span><span class="o">.</span><span class="n">summary</span><span class="p">())</span>
+</pre></div>
+</div>
+<p>This example is very similar to the non-parametric example.  We generate some data and then construct our model by passing a list of specifications and our data.  However, we also pass in a list of changepoint specifications.  Because we specified a model with 2 segments, we supply a single changepoint specification.  Here, we have specified that the changepoint will be a linear function of the variable z.  We have included an intercept term (the <code class="docutils literal notranslate"><span class="pre">'1'</span></code> in <code class="docutils literal notranslate"><span class="pre">'1+z'</span></code>).  So the changepoint, T2, that sits “in between” the first and second segments will be located at T2 = G0 + G1*z.  When we call <code class="docutils literal notranslate"><span class="pre">fit()</span></code> we supply a list of preliminary parameter values.  There are 6 values in this list: B0, B1, B2, G0, G1, and the log of the standard deviation of the (normally distributed) error term.</p>
+<section id="current-limits-to-be-relaxed-in-future-releases">
+<h3>Current limits (to be relaxed in future releases):<a class="headerlink" href="#current-limits-to-be-relaxed-in-future-releases" title="Permalink to this headline">¶</a></h3>
+<p><strong>Two segments maximum</strong></p>
+<p>Segmented currently only permits 2 segments (1 changepoint).  This will be relaxed in future releases, first for non-parametric changepoint model (already implemented) and subsequently for parametric changepoint models (where things can get a bit more complicated).</p>
+<p><strong>Identity link functions</strong></p>
+<p>Segmented currently only permits identity link functions with normally-distributed error structures.  Additional link functions (e.g., log-linear) and error functions (e.g., Student’s t) will added in future releases.</p>
+<p><strong>One predictor maximum</strong></p>
+<p>Segmented currently only permits a single predictor variable in the segment specifications (e.g., x).  We plan to relax this constraint in a future release, but the API may need to be reivsed to allow users to indicate which, of many, predictor is the primary predictor (i.e., the dimension along which the changepoints are defined).</p>
+<p><strong>Connected models only</strong></p>
+<p>Segmented currently only permits connected models.  This means that the second segment’s specification <strong>may not</strong> include an intercept-like term.  That is, this is valid:</p>
+<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="c1"># valid</span>
+<span class="n">model</span> <span class="o">=</span> <span class="n">sgmt</span><span class="o">.</span><span class="n">segmented</span><span class="p">([</span><span class="s1">&#39;y~1+x&#39;</span><span class="p">,</span> <span class="s1">&#39;0+x&#39;</span><span class="p">],</span> <span class="n">changepoints</span><span class="o">=</span><span class="p">[</span><span class="s1">&#39;1+z&#39;</span><span class="p">],</span> <span class="n">data</span><span class="o">=</span><span class="n">data</span><span class="p">)</span>
+</pre></div>
+</div>
+<p>This is <strong>not</strong> valid:</p>
+<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="c1"># not valid</span>
+<span class="n">model</span> <span class="o">=</span> <span class="n">sgmt</span><span class="o">.</span><span class="n">segmented</span><span class="p">([</span><span class="s1">&#39;y~1+x&#39;</span><span class="p">,</span> <span class="s1">&#39;1+x&#39;</span><span class="p">],</span> <span class="n">changepoints</span><span class="o">=</span><span class="p">[</span><span class="s1">&#39;1+z&#39;</span><span class="p">],</span> <span class="n">data</span><span class="o">=</span><span class="n">data</span><span class="p">)</span>
+</pre></div>
+</div>
+<p>Disconnected models will be permitted in a future release.</p>
+</section>
+</section>
+<section id="bayes-class-a-name-bayes">
+<h2>Bayes Class <span class="raw-html-m2r"><a name="bayes"></span><a class="headerlink" href="#bayes-class-a-name-bayes" title="Permalink to this headline">¶</a></h2>
+<p>This class is a new addition to segmented and, as the name implies, takes a Bayesian approach to the segmented regression model <a class="reference external" href="#segmented-class">described above</a>.  The Bayesian approach has a variety of advantages (e.g., increased flexibility for developers, far more information for users).  The  interface to the Bayesian class is similar to the segmented class described above.  The feature set is not quite equivalent, but is advancing rapidly.  Currently the Bayes class permits:</p>
+<ul class="simple">
+<li><p>Unlimited number of segments</p></li>
+<li><p>Unlimited number of predictor variables</p></li>
+</ul>
+<p>These features make the Bayes class a bit more sophisticated than the segmented class.  But the Bayes class is still limited to :</p>
+<ul class="simple">
+<li><p>Identity link functions</p></li>
+<li><p>Connected models only</p></li>
+</ul>
+<p>In addition, the Bayes class <strong>has not yet implemented parametric changepoints</strong>.  This feature is on the way and once the Bayes class reaches feature parity with the segmented class, it will replace segmented as the primary focus of the package.</p>
+<p>Here is an example of the Bayes class in use:</p>
+<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="kn">import</span> <span class="nn">arviz</span> <span class="k">as</span> <span class="nn">az</span>
+<span class="kn">import</span> <span class="nn">numpy</span> <span class="k">as</span> <span class="nn">np</span>
+<span class="kn">import</span> <span class="nn">pandas</span> <span class="k">as</span> <span class="nn">pd</span>
+<span class="n">rng</span> <span class="o">=</span> <span class="n">rng</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">random</span><span class="o">.</span><span class="n">default_rng</span><span class="p">(</span><span class="mi">12345</span><span class="p">)</span>
+
+<span class="c1"># generate some data</span>
+<span class="n">data</span> <span class="o">=</span> <span class="n">pd</span><span class="o">.</span><span class="n">DataFrame</span><span class="p">({</span><span class="s1">&#39;y&#39;</span><span class="p">:</span><span class="n">rng</span><span class="o">.</span><span class="n">random</span><span class="p">(</span><span class="n">size</span><span class="o">=</span><span class="mi">100</span><span class="p">),</span>
+                     <span class="s1">&#39;x&#39;</span><span class="p">:</span><span class="n">rng</span><span class="o">.</span><span class="n">random</span><span class="p">(</span><span class="n">size</span><span class="o">=</span><span class="mi">100</span><span class="p">)})</span>
+<span class="c1"># build a model</span>
+<span class="n">model</span> <span class="o">=</span> <span class="n">sgmt</span><span class="o">.</span><span class="n">bayes</span><span class="p">([</span><span class="s1">&#39;y~1+x&#39;</span><span class="p">]</span> <span class="o">+</span> <span class="mi">2</span><span class="o">*</span><span class="p">[</span><span class="s1">&#39;0+x&#39;</span><span class="p">],</span>
+                   <span class="n">changepoints</span><span class="o">=</span><span class="mi">2</span><span class="o">*</span><span class="p">[</span><span class="s1">&#39;1&#39;</span><span class="p">],</span> <span class="n">data</span><span class="o">=</span><span class="n">data</span><span class="p">)</span>
+<span class="c1"># fit the model</span>
+<span class="n">idata</span> <span class="o">=</span> <span class="n">model</span><span class="o">.</span><span class="n">fit</span><span class="p">()</span>
+<span class="c1"># summarize the posterior samples</span>
+<span class="n">az</span><span class="o">.</span><span class="n">summary</span><span class="p">(</span><span class="n">trace</span><span class="p">)</span>
+</pre></div>
+</div>
+<p>Please be aware that the Bayes class requires a couple of additional packages to function.  It requires <a class="reference external" href="https://emcee.readthedocs.io">emcee</a> for sampling and <a class="reference external" href="https://arviz-devs.github.io/arviz">arviz</a> for processing of the posterior samples.</p>
+</section>
+<section id="demo-class-a-name-demo">
+<h2>Demo Class <span class="raw-html-m2r"><a name="demo"></span><a class="headerlink" href="#demo-class-a-name-demo" title="Permalink to this headline">¶</a></h2>
+<p>This class embodies a segmented regression model with parametric node placement.  The specification of both the segmented regression model itself and the specification of the parametric node placement are log-linear with Poisson error structures.  The <code class="docutils literal notranslate"><span class="pre">segmented.demo</span></code> class also assumes a single node (i.e., two segments).</p>
+<p>Let’s generate some synthetic data to use for estimation.</p>
+<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="c1"># number of datapoints in our data set</span>
+<span class="n">n_samples</span> <span class="o">=</span> <span class="mi">100</span>
+
+<span class="c1"># sample x and z uniformly [0,100]</span>
+<span class="n">rng</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">random</span><span class="o">.</span><span class="n">default_rng</span><span class="p">()</span>
+<span class="n">x</span> <span class="o">=</span> <span class="mi">100</span> <span class="o">*</span> <span class="n">rng</span><span class="o">.</span><span class="n">random</span><span class="p">(</span><span class="n">size</span><span class="o">=</span><span class="n">n_samples</span><span class="p">)</span>
+<span class="n">z</span> <span class="o">=</span> <span class="mi">100</span> <span class="o">*</span> <span class="n">rng</span><span class="o">.</span><span class="n">random</span><span class="p">(</span><span class="n">size</span><span class="o">=</span><span class="n">n_samples</span><span class="p">)</span>
+<span class="n">data</span> <span class="o">=</span> <span class="n">pd</span><span class="o">.</span><span class="n">DataFrame</span><span class="p">({</span><span class="s1">&#39;x&#39;</span><span class="p">:</span><span class="n">x</span><span class="p">,</span> <span class="s1">&#39;z&#39;</span><span class="p">:</span><span class="n">z</span><span class="p">})</span>
+
+<span class="c1"># define parameters</span>
+<span class="n">b</span> <span class="o">=</span> <span class="p">[</span><span class="mf">3.5</span><span class="p">,</span> <span class="o">-</span><span class="mf">.015</span><span class="p">,</span> <span class="mf">.025</span><span class="p">]</span>
+<span class="n">g</span> <span class="o">=</span> <span class="p">[</span><span class="n">np</span><span class="o">.</span><span class="n">log</span><span class="p">(</span><span class="mi">25</span><span class="p">),</span> <span class="mf">.011</span><span class="p">]</span>
+
+<span class="c1"># generate y</span>
+<span class="n">node_mean</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">exp</span><span class="p">(</span><span class="n">g</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span> <span class="o">+</span> <span class="p">(</span><span class="n">g</span><span class="p">[</span><span class="mi">1</span><span class="p">]</span> <span class="o">*</span> <span class="n">data</span><span class="p">[</span><span class="s1">&#39;z&#39;</span><span class="p">]))</span>
+<span class="n">nodes</span> <span class="o">=</span> <span class="n">scipy</span><span class="o">.</span><span class="n">stats</span><span class="o">.</span><span class="n">poisson</span><span class="o">.</span><span class="n">rvs</span><span class="p">(</span><span class="n">node_mean</span><span class="p">)</span>
+<span class="n">y_mean</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">exp</span><span class="p">(</span>
+            <span class="n">b</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span>
+            <span class="o">+</span> <span class="p">(</span><span class="n">b</span><span class="p">[</span><span class="mi">1</span><span class="p">]</span> <span class="o">*</span> <span class="n">data</span><span class="p">[</span><span class="s1">&#39;x&#39;</span><span class="p">])</span>
+            <span class="o">+</span> <span class="p">((</span><span class="n">data</span><span class="p">[</span><span class="s1">&#39;x&#39;</span><span class="p">]</span> <span class="o">&gt;</span> <span class="n">nodes</span><span class="p">)</span> <span class="o">*</span> <span class="p">(</span><span class="n">b</span><span class="p">[</span><span class="mi">2</span><span class="p">]</span> <span class="o">*</span> <span class="p">(</span><span class="n">data</span><span class="p">[</span><span class="s1">&#39;x&#39;</span><span class="p">]</span> <span class="o">-</span> <span class="n">nodes</span><span class="p">)))</span>
+            <span class="p">)</span>
+<span class="n">data</span><span class="p">[</span><span class="s1">&#39;y&#39;</span><span class="p">]</span> <span class="o">=</span> <span class="n">scipy</span><span class="o">.</span><span class="n">stats</span><span class="o">.</span><span class="n">poisson</span><span class="o">.</span><span class="n">rvs</span><span class="p">(</span><span class="n">y_mean</span><span class="p">)</span>
+</pre></div>
+</div>
+<p>Here, we have generated data reflecting 2 segments separated by a single node.  This node is parametric: its location is dependent on <code class="docutils literal notranslate"><span class="pre">data['z']</span></code>.  Now that we have our data, let’s construct and fit our model.</p>
+<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="c1"># construct model</span>
+<span class="n">model</span> <span class="o">=</span> <span class="n">sgmt</span><span class="o">.</span><span class="n">demo</span><span class="p">(</span><span class="n">data</span><span class="o">=</span><span class="n">data</span><span class="p">)</span>
+
+<span class="c1"># fit parametric node placement segmented regression model</span>
+<span class="n">model</span><span class="o">.</span><span class="n">fit</span><span class="p">(</span><span class="n">bounds</span><span class="o">=</span><span class="p">[(</span><span class="o">-</span><span class="mi">5</span><span class="p">,</span><span class="mi">5</span><span class="p">),</span> <span class="p">(</span><span class="o">-</span><span class="mf">.05</span><span class="p">,</span><span class="mf">.05</span><span class="p">),</span> <span class="p">(</span><span class="o">-</span><span class="mf">.05</span><span class="p">,</span><span class="mf">.05</span><span class="p">),</span> <span class="p">(</span><span class="o">-</span><span class="mi">5</span><span class="p">,</span><span class="mi">5</span><span class="p">),</span> <span class="p">(</span><span class="o">-</span><span class="mf">.05</span><span class="p">,</span><span class="mf">.05</span><span class="p">)])</span>
+</pre></div>
+</div>
+<p>Here, we initialize the demonstration model by passing in our data to the initialization.  We then call <code class="docutils literal notranslate"><span class="pre">fit()</span></code> to begin the estimation/optimization process, providing bounds to constrain the parameter values considered.  Once this function call returns, we can unpack our results and see what happened.</p>
+<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="c1"># print summary of optimization</span>
+<span class="nb">print</span><span class="p">(</span><span class="n">model</span><span class="o">.</span><span class="n">summary</span><span class="p">())</span>
+
+<span class="c1"># compare parameter estimates to true values</span>
+<span class="k">for</span> <span class="n">i</span><span class="p">,</span><span class="n">j</span> <span class="ow">in</span> <span class="nb">zip</span><span class="p">(</span><span class="n">b</span><span class="o">+</span><span class="n">g</span><span class="p">,</span> <span class="n">model</span><span class="o">.</span><span class="n">result</span><span class="o">.</span><span class="n">x</span><span class="p">):</span>
+    <span class="nb">print</span><span class="p">(</span><span class="sa">f</span><span class="s1">&#39;</span><span class="si">{</span><span class="n">i</span><span class="si">:</span><span class="s1">0.4f</span><span class="si">}</span><span class="se">\t</span><span class="s1">-</span><span class="se">\t</span><span class="si">{</span><span class="n">j</span><span class="si">:</span><span class="s1">0.4f</span><span class="si">}</span><span class="s1">&#39;</span><span class="p">)</span>
+</pre></div>
+</div>
+<p>Currently, <code class="docutils literal notranslate"><span class="pre">summary()</span></code> returns a <code class="docutils literal notranslate"><span class="pre">scipy.optimize.OptimizeResult</span></code> object.</p>
+</section>
+</section>
+<section id="api">
+<h1>API<a class="headerlink" href="#api" title="Permalink to this headline">¶</a></h1>
+<dl class="py class">
+<dt class="sig sig-object py" id="segmented.segmented">
+<em class="property"><span class="pre">class</span><span class="w"> </span></em><span class="sig-prename descclassname"><span class="pre">segmented.</span></span><span class="sig-name descname"><span class="pre">segmented</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">models</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">changepoints</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">data</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#segmented.segmented" title="Permalink to this definition">¶</a></dt>
+<dd></dd></dl>
+
+<dl class="py class">
+<dt class="sig sig-object py" id="segmented.bayes">
+<em class="property"><span class="pre">class</span><span class="w"> </span></em><span class="sig-prename descclassname"><span class="pre">segmented.</span></span><span class="sig-name descname"><span class="pre">bayes</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">segments</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">y_var</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">x_var</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">changepoints</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">priors</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">data</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#segmented.bayes" title="Permalink to this definition">¶</a></dt>
+<dd></dd></dl>
+
+<dl class="py class">
+<dt class="sig sig-object py" id="segmented.demo">
+<em class="property"><span class="pre">class</span><span class="w"> </span></em><span class="sig-prename descclassname"><span class="pre">segmented.</span></span><span class="sig-name descname"><span class="pre">demo</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">data</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">par_y</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">'y'</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">par_x</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">'x'</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">par_z</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">'z'</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#segmented.demo" title="Permalink to this definition">¶</a></dt>
+<dd><p>This class is used for illustrative and replication purposes.  This object embodies a segmented regression model with parametric node placement.  The  specification of both the segmented regression model itself and the specification of the parametric node placement are log-linear with Poisson error structures and assumes a single node (i.e., two segments):</p>
+<p>mu_Y = exp(B_0 + (B_1 * X) + (B_2 * (X - exp(g_0 + (g_1 * Z)))))</p>
+<p>This specification has five parameters: B_0, B_1, B_2, g_1, and g_2.  B_0 is the intercept, B_1 is the slope of the first segment, B_2 is the change in slope occuring at the node.  The placement of the node is parametric, with its specification including an intercept, g_0, and a slope, g_1, relating Z and node placement.</p>
+<p>Please note that this model, unlike Luhmann &amp; Clouston, assumes that T_0, the degenerate node at the “left-most” end of the model, is zero.  The model used here, in which T_0 = 0, means that the intercept, B_0, will be defined relative to the orgin (as in conventional regression).  Luhmann &amp; Clouston assume that T_0 = min(X), which meant that B_0 was instead “intercept-like” and insensitive to the distribution of X.  For this reason, the demo object should only be applied to data with strictly positive values of X.</p>
+<dl>
+<dt>Args:</dt><dd><p>data (dataframe): Data to be used for estimation.  Columns contain relevant variables (i.e., outcome, predictor, co-variable).</p>
+<p>par_y (str): Name of dataframe column corresponding to the variable outcome.</p>
+<p>par_x (str): Name of dataframe column corresponding to the primary predictor variable.</p>
+<p>par_z (str): Name of dataframe column corresponding to the co-variable that is (assumed to be) related to the parametric node placements.</p>
+</dd>
+</dl>
+<dl class="py method">
+<dt class="sig sig-object py" id="segmented.demo.fit">
+<span class="sig-name descname"><span class="pre">fit</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">x0</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">bounds</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#segmented.demo.fit" title="Permalink to this definition">¶</a></dt>
+<dd><p>Estimate model parameters.  Note that this function may take quite some time to execute because it currently uses scipy’s differential_evolution procedure.</p>
+<dl>
+<dt>Args:</dt><dd><p>x0 (list-like): This argument is currently ignored.  Initial guess. Array of real elements of size (5,).  The entries of this array correspond to: [B_0, B_1, B_2, g_0, g_1].  See documentation of <a class="reference internal" href="#segmented.demo" title="segmented.demo"><code class="xref py py-class docutils literal notranslate"><span class="pre">demo</span></code></a> for further details.</p>
+<p>bounds (list-like): This argument is currently required.  Each component bounds should be a tuple of the form (min, max). The fit method uses these to constrain the search for likely parameter values.  The entries of tuples should correspond to: [(B_0_min, B_0_max), (B_1_min, B_1_max), (B_2_min, B_2_max), (g_0_min, g_0_max), (g_1_min, g_1_max)].</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="segmented.demo.set_data">
+<span class="sig-name descname"><span class="pre">set_data</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">data</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#segmented.demo.set_data" title="Permalink to this definition">¶</a></dt>
+<dd><p>A method to set the data object.</p>
+<dl class="simple">
+<dt>Args:</dt><dd><p>data (dataframe): Data to use for estimation.  Columns contain relevant variables.</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="segmented.demo.summary">
+<span class="sig-name descname"><span class="pre">summary</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="headerlink" href="#segmented.demo.summary" title="Permalink to this definition">¶</a></dt>
+<dd><p>Summarize the optimization procedure.  Currently returns a scipy.optimize.OptimizeResult object.</p>
+</dd></dl>
+
+</dd></dl>
+
+</section>
+
+
+          </div>
+          
+      </div>
+      <div class="clearer"></div>
+    </div>
+    <div class="footer">
+      &copy;2021, Christian C. Luhmann.
+      
+      |
+      Powered by <a href="http://sphinx-doc.org/">Sphinx 4.4.0</a>
+      &amp; <a href="https://github.com/bitprophet/alabaster">Alabaster 0.7.12</a>
+      
+      |
+      <a href="_sources/index.rst.txt"
+          rel="nofollow">Page source</a>
+    </div>
+
+    
+
+    
+  </body>
+</html>
