@@ -20,6 +20,14 @@ segmented.segmented module
    :undoc-members:
    :show-inheritance:
 
+segmented.bayes module
+--------------------------
+
+.. automodule:: segmented.bayes
+   :members:
+   :undoc-members:
+   :show-inheritance:
+
 segmented.version module
 ------------------------
 

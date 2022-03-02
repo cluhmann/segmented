@@ -12,5 +12,10 @@ API
 .. autoclass:: segmented.segmented
     :members:
 
+.. autoclass:: segmented.bayes
+    :members:
+
 .. autoclass:: segmented.demo
     :members:
+
+
