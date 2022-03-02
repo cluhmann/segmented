@@ -1,8 +1,14 @@
 # segmented
 
-segmented is a Python toolbox for performing segmented regression, with an initial focus on characterizing parametric changepoints.  The package currently provides two classes, each serving different purposes and each providing different feature sets.  The `segmented.demo` class is for demonstration and replication purposes only (please [see here](#demo) for details).  The `segmented.segmented` class provides the core functionality.  This class currently permits connected, parametric segmented linear regression models with identity link functions.  Eventually, this class will permit an arbitrary number of segments/nodes, alternative link functions, etc.
+segmented is a Python toolbox for performing segmented regression, with an initial focus on characterizing parametric changepoints.  The `segmented.demo` class is for demonstration and replication purposes only (please [see here](#Demo-Class) for details).  The `segmented.segmented` class provides the core functionality.  This class currently permits connected, parametric segmented linear regression models with identity link functions.  The `segmented.bayes` class permits Bayesian estimation of these same models. Eventually, the package will permit alternative link functions and other more flexible models to be specified.
+
+[Installation](#Installation)  
+[Segmented class](#Segmented-Class)  
+[Bayes class](#Bayes-Class)  
+[Demo class](#Demo-Class)  
 
 ## Installation
+
 
 segmented is written for Python 3.7+.  The latest release of segmented can be installed from PyPI using pip:
 
@@ -14,7 +20,7 @@ pip install segmented
 
 Here, we briefly outline the functionality of the `segmented.segmented` class.  This class is intended to be the workhorse class of the segmented package.  This class currently permits the construction of segmented linear regression models that are a) connected, b) parametric (or non-parametric), and c) have identity link functions, and d) Gaussian noise.  Future releases will relax these requirements (see below).
 
-Let's see an example.  In what follows, we assume the following initial imports.  These are, coincidentally, the packages required by segmented:
+Let's see an example.  In what follows, we assume the following initial imports.  These are, coincidentally, (most of) the packages required by segmented:
 
 ```python
 import pandas as pd
@@ -106,7 +112,7 @@ Segmented currently only permits identity link functions with normally-distribut
 
 Segmented currently only permits a single predictor variable in the segment specifications (e.g., x).  We plan to relax this constraint in a future release, but the API may need to be reivsed to allow users to indicate which, of many, predictor is the primary predictor (i.e., the dimension along which the changepoints are defined).
 
-**Connected Models Only**
+**Connected models only**
 
 Segmented currently only permits connected models.  This means that the second segment's specification **may not** include an intercept-like term.  That is, this is valid:
 
@@ -125,8 +131,46 @@ model = sgmt.segmented(['y~1+x', '1+x'], changepoints=['1+z'], data=data)
 Disconnected models will be permitted in a future release.
 
 
+## Bayes Class
 
-## <a name="demo"></a> Demo Class
+This class is a new addition to segmented and, as the name implies, takes a Bayesian approach to the segmented regression model [described above](#Segmented-Class).  The Bayesian approach has a variety of advantages (e.g., increased flexibility for developers, far more information for users).  The  interface to the Bayesian class is similar to the segmented class described above.  The feature set is not quite equivalent, but is advancing rapidly.  Currently the Bayes class permits:
+
+- Unlimited number of segments
+- Unlimited number of predictor variables
+
+These features make the Bayes class a bit more sophisticated than the segmented class.  But the Bayes class is still limited to :
+
+- Identity link functions
+- Connected models only
+
+In addition, the Bayes class **has not yet implemented parametric changepoints**.  This feature is on the way and once the Bayes class reaches feature parity with the segmented class, it will replace segmented as the primary focus of the package.
+
+Here is an example of the Bayes class in use:
+
+```python
+import arviz as az
+import numpy as np
+import pandas as pd
+rng = rng = np.random.default_rng(12345)
+
+# generate some data
+data = pd.DataFrame({'y':rng.random(size=100),
+                     'x':rng.random(size=100)})
+# build a model
+model = sgmt.bayes(['y~1+x'] + 2*['0+x'],
+                   changepoints=2*['1'], data=data)
+# fit the model
+idata = model.fit()
+# summarize the posterior samples
+az.summary(trace)
+```
+
+Please be aware that the Bayes class requires a couple of additional packages to function.  It requires [emcee](https://emcee.readthedocs.io) for sampling and [arviz](https://arviz-devs.github.io/arviz) for processing of the posterior samples.
+
+
+
+
+## Demo Class
 
 This class embodies a segmented regression model with parametric node placement.  The specification of both the segmented regression model itself and the specification of the parametric node placement are log-linear with Poisson error structures.  The `segmented.demo` class also assumes a single node (i.e., two segments).
 

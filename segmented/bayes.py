@@ -5,7 +5,20 @@ import pandas as pd
 import scipy.optimize
 import scipy.stats
 import patsy
-import arviz
+
+try:
+    import emcee
+except ModuleNotFoundError as e:
+    raise ModuleNotFoundError(
+        "Bayesian estimation requires emcee to be installed."
+    ) from e
+try:
+    import arviz
+except ModuleNotFoundError as e:
+    raise ModuleNotFoundError(
+        "Bayesian estimation requires arviz to be installed."
+    ) from e
+
 
 from multiprocessing import Pool
 from contextlib import nullcontext
@@ -121,7 +134,7 @@ class bayes_base:
         # if the changepoints are implicit, specify them explicitly here
         # as an "intercept-only" specification
         if changepoints is None:
-            changepoints = ['1' for i in range(self.num_segments-1)]
+            changepoints = ['1'] * (self.num_segments-1)
 
         # if we have received a list
         if isinstance(changepoints, list):
@@ -141,6 +154,10 @@ class bayes_base:
                         )
                     self.changepoint_specifications += [spec]
                     dmat = patsy.dmatrix(spec, self.data, return_type='dataframe')
+                    if (len(dmat.columns) > 1) or not ('Intercept' in dmat.columns):
+                        raise NotImplementedError(
+                            "Complex changepoints not yet implemented.  Please only include \"intercept\" changepoint specifications (e.g. changepoints=[\"1\", \"1\"])"
+                        )
                     self.changepoint_dmatrices += [dmat]
 
             else:
@@ -175,8 +192,8 @@ class bayes_base:
                 raise ValueError(
                     "Received an invalid models object.  Models must be a list of patsy strings."
                 )
-        if self.changepoint_params is not None:
-            if not isinstance(self.changepoint_coefs, list):
+        if self.changepoint_specifications is not None:
+            if not isinstance(self.changepoint_specifications, list):
                 raise ValueError(
                     "Received an invalid changepoints object.  Changepoints must be a list of initial guesses or patsy strings."
                 )
@@ -192,13 +209,13 @@ class bayes_base:
                 raise ValueError(
                     "Number of segments implied by model specification conflicts with the specified number of segments."
                 )
-        if isinstance(self.changepoint_params, list) and (self.num_segments is not None):
-            if len(self.changepoint_params) != self.num_segments:
+        if isinstance(self.changepoint_specifications, list) and (self.num_segments is not None):
+            if len(self.changepoint_specifications) != self.num_segments - 1:
                 raise ValueError(
                     "Number of segments implied by changepoint specification conflicts with the specified number of segments."
                 )
-        if isinstance(self.changepoint_params, list) and isinstance(self.segment_specifications, list):
-            if len(self.changepoint_params) != len(self.segment_specifications):
+        if isinstance(self.changepoint_specifications, list) and isinstance(self.segment_specifications, list):
+            if len(self.changepoint_specifications) != len(self.segment_specifications)-1:
                 raise ValueError(
                     "Number of segments implied by changepoint specification conflicts with the number implied y the model specification."
                 )
@@ -223,14 +240,7 @@ class bayes(bayes_base):
         self.validate_parameters()
 
 
-    def fit(self, num_samples=1000, num_burnin=200, num_walkers=30, num_cores=None):
-
-        try:
-            import emcee
-        except ModuleNotFoundError as e:
-            raise ModuleNotFoundError(
-                "Bayesian estimation requires emcee to be installed."
-            ) from e
+    def fit(self, num_samples=500, num_burnin=200, num_walkers=30, num_cores=None):
 
         # figure out a good place to begin our sampling
         p0 = self.gen_start_point(num_walkers)
@@ -542,7 +552,12 @@ class bayes(bayes_base):
         return np.sum(logp)
 
 
-    def predict(self, params, data=None, debug=False):
+    def predict(self, params=None, data=None, debug=False):
+
+        if params is None:
+            raise ValueError(
+                "Cannot predict without parameters being specified."
+            )
 
         if data is None:
             data = self.data
@@ -669,6 +684,15 @@ class bayes(bayes_base):
 
 
         return y_hat
+
+
+    def sample_posterior_predictive(self, idata=None):
+
+        if idata is None:
+            raise ValueError(
+                "Cannot predict without posterior samples. Please provide inference data."
+            )
+
 
 
 
