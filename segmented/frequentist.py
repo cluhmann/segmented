@@ -6,10 +6,51 @@ import scipy.optimize
 import scipy.stats
 import patsy
 
+from multiprocessing import Pool
+from contextlib import nullcontext
+
+
+
 tol = 1e-6
 
+# these functions are used to convert parameters from (ragged) nested lists
+# of numpy arrays to flatten arrays for estimation/optimization
+# the unflattening operation is the tricky one as it must reconstitute
+# the flattened list back into the appropriate (ragged) shape
+def _flatten(values):
+    if isinstance(values, np.ndarray):
+        yield values.flatten()
+    else:
+        for value in values:
+            yield from _flatten(value)
 
-class segmented:
+def flatten(values):
+    # flatten nested lists of np.ndarray to np.ndarray
+    return np.concatenate(list(_flatten(values)))
+
+def _unflatten(flat_values, prototype, offset):
+    if isinstance(prototype, np.ndarray):
+        shape = prototype.shape
+        new_offset = offset + np.product(shape)
+        value = flat_values[offset:new_offset].reshape(shape)
+        return value, new_offset
+    else:
+        result = []
+        for value in prototype:
+            value, offset = _unflatten(flat_values, value, offset)
+            result.append(value)
+        return result, offset
+
+def unflatten(flat_values, prototype):
+    # unflatten np.ndarray to nested lists with structure of prototype
+    result, offset = _unflatten(flat_values, prototype, 0)
+    assert(offset == len(flat_values))
+    return result
+
+
+
+class sgmt_base:
+
     """
     Class implementing segmented regression.
 
@@ -94,7 +135,7 @@ class segmented:
         Currently just returns self.result.
     """
 
-    def __init__(self, models, changepoints=None, data=None):
+    def __init__(self):
 
         self.models = None
         self.data = None
@@ -112,12 +153,6 @@ class segmented:
         self.changepoint_coefs = None
         self.segment_coefs = None
         self.result = None
-
-        # data must be set before models/changepoints
-        self.set_data(data, validate=False)
-        self.set_models(models, validate=False)
-        self.set_changepoints(changepoints, validate=False)
-        self.validate_parameters()
 
 
     def set_data(self, data=None, validate=True):
@@ -198,53 +233,6 @@ class segmented:
             self.validate_parameters()
 
 
-    def set_changepoints(self, changepoints, validate=True):
-        # nodes are static unless logic below determines otherwise
-        self.nodes_parametric = False
-
-        # trivial case
-        if changepoints is None:
-            self.changepoint_coefs = None
-            return
-
-        # if we have received a list
-        if isinstance(changepoints, list):
-
-            # if we have received parametric node placement specifications
-            if isinstance(changepoints[0], str):
-                self.nodes_parametric = True
-                if len(changepoints) > 1:
-                    raise ValueError(
-                        "Only a single changepoint may be specified currently."
-                    )
-                if self.data is None:
-                    raise ValueError(
-                        "Cannot specify changepoints without valid data."
-                    )
-                if "~" in changepoints[0]:
-                    raise ValueError(
-                        "Received an invalid changepoint specification.  Changepoints may not specify an outcome variable."
-                    )
-
-                # insert dummy intercept (left, terminal node) into list of changepoints
-                # we should probably make users do this at some point
-                self.changepoint_specifications = ['1'] + changepoints
-                # extract dmatrices, hacking the first dummy
-                self.changepoint_dmatrices = [
-                    pd.DataFrame({'Intercept':np.ones(self.data.shape[0])}),
-                    patsy.dmatrix(changepoints[0], self.data, return_type='dataframe')
-                ]
-
-            else:
-                raise ValueError(
-                    "Changepoints must be patsy strings."
-                )
-
-        if validate:
-            # validate
-            self.validate_parameters()
-
-
     def set_num_segments(self, num_segments, validate=True):
 
         self.num_segments = num_segments
@@ -300,6 +288,71 @@ class segmented:
             self.num_segments = len(self.segment_specifications)
 
 
+    def summary(self):
+        # raise NotImplementedError("segmented.summary() not implemented at this time.")
+        return self.result
+
+
+class segmented(sgmt_base):
+
+    def __init__(self, models, changepoints=None, data=None):
+
+        super().__init__()
+
+        # data must be set before models/changepoints
+        self.set_data(data, validate=False)
+        self.set_models(models, validate=False)
+        self.set_changepoints(changepoints, validate=False)
+        self.validate_parameters()
+
+
+    def set_changepoints(self, changepoints, validate=True):
+        # nodes are static unless logic below determines otherwise
+        self.nodes_parametric = False
+
+        # trivial case
+        if changepoints is None:
+            self.changepoint_coefs = None
+            return
+
+        # if we have received a list
+        if isinstance(changepoints, list):
+
+            # if we have received parametric node placement specifications
+            if isinstance(changepoints[0], str):
+                self.nodes_parametric = True
+                if len(changepoints) > 1:
+                    raise ValueError(
+                        "Only a single changepoint may be specified currently."
+                    )
+                if self.data is None:
+                    raise ValueError(
+                        "Cannot specify changepoints without valid data."
+                    )
+                if "~" in changepoints[0]:
+                    raise ValueError(
+                        "Received an invalid changepoint specification.  Changepoints may not specify an outcome variable."
+                    )
+
+                # insert dummy intercept (left, terminal node) into list of changepoints
+                # we should probably make users do this at some point
+                self.changepoint_specifications = ['1'] + changepoints
+                # extract dmatrices, hacking the first dummy
+                self.changepoint_dmatrices = [
+                    pd.DataFrame({'Intercept':np.ones(self.data.shape[0])}),
+                    patsy.dmatrix(changepoints[0], self.data, return_type='dataframe')
+                ]
+
+            else:
+                raise ValueError(
+                    "Changepoints must be patsy strings."
+                )
+
+        if validate:
+            # validate
+            self.validate_parameters()
+
+
     def fit(self, x0, **kwargs):
 
         # we got parameter values, but already results in self.result
@@ -310,81 +363,7 @@ class segmented:
         # clear out any old results
         self.result = None
 
-        # dispatch to appropriate method
-        if self.nodes_parametric:
-            self._fit_parametric(x0, **kwargs)
-        else:
-            self._fit_nonparametric(x0)
 
-
-    def _fit_nonparametric(self, changepoints):
-
-        assert(len(changepoints) == (self.num_segments-1) )
-        warnings.warn('WARNING: segmented.fit() running with unvalidated parameter guesses (x0).', RuntimeWarning, stacklevel=2)
-
-        # the algorithm below assumes a limited model specification
-        # based on the method described by Muggeo (2003, Statist. Med.)
-
-        # pull the individual variables out of the design matrices
-        y = self.outcome_dmatrix.to_numpy().reshape(-1)
-        intercept = self.segment_dmatrices[0].iloc[:,0]
-        x = self.segment_dmatrices[0].iloc[:,1]
-
-        # Muggeo's algorithm
-        threshold = .00001 * np.min(np.diff(x))
-        converged = False
-        while not converged:
-            U = [np.clip(x - changepoints[0], 0, None)]
-            V = [(x - changepoints[0]) > 0]
-            for changepoint in changepoints[1:]:
-                U += [np.clip(x - changepoint, 0, None)]
-                V += [(x - changepoint) > 0]
-
-            predictors = np.array([intercept, x] + U + V)
-
-            result = np.linalg.lstsq(predictors.transpose(), y, rcond=None)
-
-            beta = result[0][2:2+len(changepoints)]
-            gamma = result[0][2+len(changepoints):]
-            changepoints = changepoints - (gamma/beta)
-
-            # check for convergence
-            converged = np.abs(np.max(gamma)) < threshold
-
-        # save results
-        self.changepoint_coefs = np.hstack([x.min(), changepoints[:]])
-        self.segment_coefs = result[0][0:2+len(changepoints)]
-
-        # augment result so that initial node is at x=min(x)
-        self.segment_coefs[0] = self.segment_coefs[0] + (self.segment_coefs[1] * x.min())
-
-
-    def logp(self, params, debug=False):
-
-        # heper function for fit()/optimization method below
-
-        # predict outcome variable
-        y_hat = self.predict(self.data, params=params, fitting=True, debug=debug)
-
-        # likelihood of each observation
-        y_dmat = self.outcome_dmatrix.to_numpy().reshape(-1)
-        # error is currently normal and parameter is the log of the SD
-        error_sd = np.exp(params[-1])
-        logp = scipy.stats.norm.logpdf(y_dmat, y_hat, error_sd)
-
-        if debug:
-            print('fitting')
-            print('params: '+str(params))
-            print('y_dmat: '+str(y_dmat.reshape([-1,1])))
-            print('y_hat: '+str(y_hat))
-            print('logp: '+str(logp))
-            print('sumlogp: '+str(np.sum(logp)))
-
-        # negative log likelihood of entire data set
-        return -1 * np.sum(logp)
-
-
-    def _fit_parametric(self, x0, **kwargs):
         warnings.warn('WARNING: segmented.fit() running with unvalidated parameter guesses (x0).', RuntimeWarning, stacklevel=2)
 
         # set defaults for scipy.optimize.minimize() call below
@@ -417,9 +396,11 @@ class segmented:
         self.segment_coefs = []
         param_index = 0
         for seg in self.segment_dmatrices:
+            this_seg_coefs = []
             for _ in range(seg.shape[1]):
-                self.segment_coefs += [self.result.x[param_index]]
+                this_seg_coefs += [self.result.x[param_index]]
                 param_index += 1
+            self.segment_coefs += [this_seg_coefs]
 
         # save min(x) as the left, terminal node
         predictor_name = list(set(self.segment_dmatrices[0].columns) - set(["Intercept"]))
@@ -429,64 +410,41 @@ class segmented:
         # for each segment
         for seg in self.changepoint_dmatrices:
             # for each predictor in the segment's changepoint specification
+            this_cp_coefs = []
             for __ in range(seg.shape[1]):
-                self.changepoint_coefs += [self.result.x[param_index]]
+                this_seg_coefs += [self.result.x[param_index]]
                 param_index += 1
+            self.changepoint_coefs += [this_seg_coefs]
 
         return self
 
 
+    def logp(self, params, debug=False):
+
+        # helper function for fit()/optimization method below
+
+        # predict outcome variable
+        y_hat = self.predict(self.data, params=params, fitting=True, debug=debug)
+
+        # likelihood of each observation
+        y_dmat = self.outcome_dmatrix.to_numpy().reshape(-1)
+        # error is currently normal and parameter is the log of the SD
+        error_sd = np.exp(params[-1])
+        logp = scipy.stats.norm.logpdf(y_dmat, y_hat, error_sd)
+
+        if debug:
+            print('fitting')
+            print('params: '+str(params))
+            print('y_dmat: '+str(y_dmat.reshape([-1,1])))
+            print('y_hat: '+str(y_hat))
+            print('logp: '+str(logp))
+            print('sumlogp: '+str(np.sum(logp)))
+
+        # negative log likelihood of entire data set
+        return -1 * np.sum(logp)
+
+
     def predict(self, data, params=None, fitting=False, debug=False):
-
-        # dispatch to appropriate method
-        if self.nodes_parametric:
-            return self._predict_parametric(data, params, fitting=fitting, debug=debug)
-        else:
-            return self._predict_nonparametric(data, params, fitting=fitting, debug=debug)
-
-
-    def _predict_nonparametric(self, data, params=None, fitting=False, debug=False):
-
-        # use the parameter values that were passed in
-        if params is not None:
-            if not(len(params) == 5):
-                raise ValueError(
-                    "predict() received invalid initial parameter value guesses.  Expected 5, received " + str(len(params)) +"."
-                )
-
-            # parameters are assumed because nonparametric is rigid (Muggeo)
-            t_2, beta_0, beta_1, beta_2, error_sd = params
-            # here, we define t_1, the first node, to be the
-            # minimum of the data **passed when object was created**
-            # NOT on the data we are now using for prediction
-            # otherwise, the other parameter values make no sense
-            t_1 = self.data[predictor_var_name].min()
-        else:
-            # extract parameter values from self
-            (
-                beta_0,
-                beta_1,
-                beta_2
-            ) = self.segment_coefs
-            t_1, t_2 = self.changepoint_coefs
-
-        x_1 = data[predictor_var_name] - t_1
-        x_2 = data[predictor_var_name] - t_2
-
-        # !!!
-        # intercept is currently hardcoded into 1st segment
-        # and omitted from second segment
-        # !!!
-        y_1 = beta_0 + beta_1 * x_1
-        y_2 = beta_2 * x_2
-
-        # predictions are masked according to changepoint
-        y_hat = np.where(data[predictor_var_name] <= t_2, y_1, y_1 + y_2)
-
-        return y_hat
-
-
-    def _predict_parametric(self, data, params=None, fitting=False, debug=False):
 
         # use the parameter values that were passed in
         if params is not None:
@@ -637,8 +595,118 @@ class segmented:
         return y_hat
 
 
-    def summary(self):
-        # raise NotImplementedError("segmented.summary() not implemented at this time.")
-        return self.result
+class nonparametric(sgmt_base):
+
+    def __init__(self, models, data=None):
+
+        super().__init__()
+
+        # data must be set before models/changepoints
+        self.set_data(data, validate=False)
+        self.set_models(models, validate=False)
+        self.validate_parameters()
+
+
+    def fit(self, cp0):
+
+        # we got parameter values, but already results in self.result
+        # warn user and use the parameter values that were passed in
+        if (self.result is not None) and (cp0 is not None) and (not np.array_equal(self.result, cp0, equal_nan=True)):
+            warnings.warn('WARNING: segmented.predict() was previously fit, but received parameter values. Using parameter values passed to predict().', RuntimeWarning, stacklevel=2)
+        warnings.warn('WARNING: segmented.fit() running with unvalidated parameter guesses (x0).', RuntimeWarning, stacklevel=2)
+
+        # clear out any old results
+        self.result = None
+
+        assert(len(cp0) == (self.num_segments-1) )
+
+        # the algorithm below assumes a limited model specification
+        # based on the method described by Muggeo (2003, Statist. Med.)
+
+        # pull the individual variables out of the design matrices
+        y = self.outcome_dmatrix.to_numpy().reshape(-1)
+        intercept = self.segment_dmatrices[0].iloc[:,0]
+        x = self.segment_dmatrices[0].iloc[:,1]
+
+        # Muggeo's algorithm
+        threshold = .00001 * np.min(np.diff(x))
+        converged = False
+        changepoints = cp0
+        while not converged:
+            U = [np.clip(x - changepoints[0], 0, None)]
+            V = [(x - changepoints[0]) > 0]
+            for changepoint in changepoints[1:]:
+                U += [np.clip(x - changepoint, 0, None)]
+                V += [(x - changepoint) > 0]
+
+            predictors = np.array([intercept, x] + U + V)
+
+            result = np.linalg.lstsq(predictors.transpose(), y, rcond=None)
+
+            beta = result[0][2:2+len(changepoints)]
+            gamma = result[0][2+len(changepoints):]
+            changepoints = changepoints - (gamma/beta)
+
+            # check for convergence
+            converged = np.abs(np.max(gamma)) < threshold
+
+        # save results
+        self.changepoint_coefs = np.hstack([x.min(), changepoints[:]])
+        self.segment_coefs = result[0][0:2+len(changepoints)]
+
+        # augment result so that initial node is at x=min(x)
+        self.segment_coefs[0] = self.segment_coefs[0] + (self.segment_coefs[1] * x.min())
+
+
+
+    def predict(self, data, params=None, fitting=False, debug=False):
+
+        # use the parameter values that were passed in
+        if params is not None:
+            if not(len(params) == 5):
+                raise ValueError(
+                    "predict() received invalid initial parameter value guesses.  Expected 5, received " + str(len(params)) +"."
+                )
+
+            # parameters are assumed because nonparametric is rigid (Muggeo)
+            t_2, beta_0, beta_1, beta_2, error_sd = params
+            # here, we define t_1, the first node, to be the
+            # minimum of the data **passed when object was created**
+            # NOT on the data we are now using for prediction
+            # otherwise, the other parameter values make no sense
+            t_1 = self.data[predictor_var_name].min()
+        else:
+            # extract parameter values from self
+            (
+                beta_0,
+                beta_1,
+                beta_2
+            ) = self.segment_coefs
+            t_1, t_2 = self.changepoint_coefs
+
+        x_1 = data[predictor_var_name] - t_1
+        x_2 = data[predictor_var_name] - t_2
+
+        # !!!
+        # intercept is currently hardcoded into 1st segment
+        # and omitted from second segment
+        # !!!
+        y_1 = beta_0 + beta_1 * x_1
+        y_2 = beta_2 * x_2
+
+        # predictions are masked according to changepoint
+        y_hat = np.where(data[predictor_var_name] <= t_2, y_1, y_1 + y_2)
+
+        return y_hat
+
+
+
+
+
+
+
+
+
+
 
 

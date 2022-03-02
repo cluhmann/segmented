@@ -1,11 +1,13 @@
 import pytest
 
+import arviz as az
 import numpy as np
 import pandas as pd
 import segmented as sgmt
 
 from pandas.testing import assert_frame_equal
 
+rng = np.random.default_rng(12345)
 
 def test_init():
 
@@ -125,7 +127,7 @@ def test_connected_nonparametric_fit():
     x = np.array([0,1,2,3,4,5,6,7,8,9])
     y = np.array([0,0,0,0,0,0,1,2,3,4])
     data = pd.DataFrame({'x':x, 'y':y})
-    model = sgmt.segmented(['y~1+x', '0+x'], data=data)
+    model = sgmt.nonparametric(['y~1+x', '0+x'], data=data)
     model.fit([7])
     assert(model.changepoint_coefs == pytest.approx([x.min(), 5]))
     assert(model.segment_coefs == pytest.approx([0,0,1]))
@@ -133,7 +135,7 @@ def test_connected_nonparametric_fit():
     x = np.array([0,1,2,3,4,5,6,7,8,9])
     y = np.array([2,2,2,2,2,2,3,4,5,6])
     data = pd.DataFrame({'x':x, 'y':y})
-    model = sgmt.segmented(['y~1+x', '0+x'], data=data)
+    model = sgmt.nonparametric(['y~1+x', '0+x'], data=data)
     model.fit([7])
     assert(model.changepoint_coefs == pytest.approx([x.min(), 5]))
     assert(model.segment_coefs == pytest.approx([2,0,1]))
@@ -141,7 +143,7 @@ def test_connected_nonparametric_fit():
     x = np.array([0,1,2,3,4,5,6,7,8,9])
     y = np.array([0,1,2,3,4,5,7,9,11,13])
     data = pd.DataFrame({'x':x, 'y':y})
-    model = sgmt.segmented(['y~1+x', '0+x'], data=data)
+    model = sgmt.nonparametric(['y~1+x', '0+x'], data=data)
     model.fit([7])
     assert(model.changepoint_coefs == pytest.approx([x.min(), 5]))
     assert(model.segment_coefs == pytest.approx([0,1,1]))
@@ -150,10 +152,11 @@ def test_connected_nonparametric_fit():
     x = np.array([10,11,12,13,14,15,16,17,18,19])
     y = np.array([0, 0, 0, 0, 0, 0, 1, 2, 3, 4])
     data = pd.DataFrame({'x':x, 'y':y})
-    model = sgmt.segmented(['y~1+x', '0+x'], data=data)
+    model = sgmt.nonparametric(['y~1+x', '0+x'], data=data)
     model.fit([14])
     assert(model.changepoint_coefs == pytest.approx([x.min(), 15]))
     assert(model.segment_coefs == pytest.approx([0,0,1]))
+
 
 
 def test_connected_parametric_fit():
@@ -234,6 +237,88 @@ def test_connected_parametric_fit():
     model.fit([0, 0, 0, data['x'].median(), 0, 1])
     assert( model.result.x[0:-1] == pytest.approx(np.hstack((b,cp)), abs=.05) )
     assert( model.result.x[-1] < -3 )
+
+
+
+
+def test_bayes_nonparametric():
+
+    data = pd.DataFrame({'x':[0,5], 'y':[0,0], 'z':[0,1]})
+
+    # 2 connected segments, non-parametric changepoint
+    model = sgmt.bayes(['y~1+x', '0+x'], data=data)
+
+    # 3 connected segments, static changepoints
+    model = sgmt.bayes(['y~1+x'] + 2*['0+x'], data=data)
+
+    # 2 disconnected segments, static changepoint
+    model = sgmt.bayes(['y~1+x', '1+x'], data=data)
+
+    # 2 connected segments, covariates, and parametric changepoints
+    # here, income is a covariate in the model so it is ambiguous which
+    # varaible the changepoint will operate over
+    # so we need to specify it explicitly
+    data = pd.DataFrame({'score':[0,0], 'time':[0,5], 'income':[12,33], 'IQ':[0,1]})
+    model = sgmt.bayes(['score~1+time+income', '1+time+income'],
+                        x_var='time',
+                        data=data)
+
+    # focus on estimation
+    data = pd.DataFrame({'y':rng.random(size=100), 'x':rng.random(size=100)})
+    model = sgmt.bayes(['y~1+x', '0+x'], data=data)
+    # fit model
+    trace = model.fit()
+    # summarize the model estimation
+    az.summary(trace)
+
+    # 3 connected segments, static but explicit changepoints
+    model = sgmt.bayes(['y~1+x'] + 2*['0+x'], changepoints=2*['1'], data=data)
+
+    # 2 disconnected segments, static but explicit changepoint
+    model = sgmt.bayes(['y~1+x', '1+x'], changepoints=['1'], data=data)
+
+
+    # we also allow explicit indication of the the outcome
+    # variable as it might ease the writing of segment specifications
+    data = pd.DataFrame({'y':[0,0], 'x':[0,5]})
+    sgmt.bayes(5 * ['1+x'], changepoints=4*['1'], y_var='y', data=data)
+
+    # at some point we can permit these sort of implicit specs
+    # fill in changepoints with intercepts
+    #sgmt.bayes(['y', '1+x', '1+x'], data=data)
+    # equivalent to:
+    # sgmt.bayes(['y', '1+x', '1+x'], changepoints=['1', '1','1'], data=data)
+
+    # focus on estimation
+    data = pd.DataFrame({'y':rng.random(size=100), 'x':rng.random(size=100)})
+    model = sgmt.bayes(['y~1+x', '0+x'], changepoints=['1'], data=data)
+    # fit model
+    idata = model.fit()
+    # summarize the model estimation
+    az.summary(idata)
+
+
+@pytest.mark.xfail(raises=NotImplementedError)
+def test_bayes_parametric_1():
+
+    # 2 connected segments, covariates, and parametric changepoints
+    # here, income is a covariate in the model so it is ambiguous which
+    # varaible the changepoint will operate over
+    # so we need to specify it explicitly
+    data = pd.DataFrame({'y':[0,0], 'x':[0,5], 'z1':[12,33], 'z2':[0,1]})
+    model = sgmt.bayes(['y~1+x+z1', '1+x+z1'],
+                            changepoints=['1+z2'],
+                            x_var='x',
+                            data=data)
+
+
+@pytest.mark.xfail(raises=NotImplementedError)
+def test_bayes_parametric_2():
+
+    data = pd.DataFrame({'x':[0,5], 'y':[0,0], 'z':[0,1]})
+
+    # 2 DISconnected segments, parametric changepoint
+    model = sgmt.bayes(['y~1+x', '0+x'], changepoints=['0+z'], data=data)
 
 
 
