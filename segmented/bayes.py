@@ -15,6 +15,7 @@ from multiprocessing import Pool
 tol = 1e-6
 
 
+
 class bayes_base(ABC):
 
     def __init__(self, segments, y_var=None, x_var=None, changepoints=None, priors=None, data=None):
@@ -313,7 +314,7 @@ class bayes_base(ABC):
 
         if debug:
             print('fitting')
-            print('params: '+str(params))
+            print('params: '+str(point))
             print('y_dmat: '+str(y_dmat.reshape([-1,1])))
             print('y_hat: '+str(y_hat))
             print('logp: '+str(logp))
@@ -875,6 +876,9 @@ class bayes_parametric(bayes_base):
         y_sd = np.std(self.data[self.y_var])
         x_sd = np.std(self.data[self.x_var])
         x_range = np.ptp(self.data[self.x_var])
+        x_mean = np.mean(self.data[self.x_var])
+        x_min = np.min(self.data[self.x_var])
+        x_max = np.max(self.data[self.x_var])
         #print('y_sd:\t' + str(y_sd))
         #print('x_range:\t' + str(x_range))
         #print('SLOPE PRIOR SD:\t' + str(y_sd/x_range))
@@ -894,9 +898,13 @@ class bayes_parametric(bayes_base):
             # for each predictor in specification
             for var in dmat.columns:
                 if var == 'Intercept':
-                    prior += [scipy.stats.t(df = 3., loc = 0., scale = 3. * x_sd)]
+                    #prior += [scipy.stats.t(df = 3., loc = x_mean, scale = 3. * x_sd)]
+                    #TODO
+                    # this prior is too restrictive, should permit cps outside xrange
+                    prior += [scipy.stats.uniform(loc = x_min, scale = x_max)]
                 else:
-                    prior += [scipy.stats.t(df = 3., loc = 0., scale = x_sd/x_range)]
+                    #prior += [scipy.stats.t(df = 3., loc = 0., scale = x_sd/np.ptp(dmat[var]))]
+                    prior += [scipy.stats.t(df = 3., loc = 0., scale = 1.)]
 
         # for each error structure (only 1 right now)
         prior += [scipy.stats.halfnorm(loc = 0, scale=y_sd )]
@@ -1006,20 +1014,22 @@ class bayes_parametric(bayes_base):
         # extract primary predictor variable from new data
         #print('pname: ' + str(self.x_var))
         #print('data: ' + str(data))
-        x = data[self.x_var].to_numpy(dtype=float).reshape([-1,1])
+        x = data[self.x_var].to_numpy(dtype=float)#.reshape([-1,1])
         # reconstruct intercept vector
         intercept = np.ones_like(x) * self.segment_dmatrices[0]['Intercept'].to_numpy()[0]
         y_hat = np.zeros((x.shape[0],))
         zeros = np.zeros_like(x)
 
         # deal with changepoint
-        # there should only be one (insured during initial model specification)
+        # there should only be one (ensured during initial model specification)
         # but assert here so that we can refactor this once we allow for > 1 cp
         assert(len(self.changepoint_dmatrices) == 1)
         cp_dmat = self.changepoint_dmatrices[0]
         # create a list of changepoints
         # first is the left-most edge of the x-values
-        cps = np.append(np.min(x), np.sum(cp_params * cp_dmat.to_numpy(), axis=1))
+        cps = np.vstack((np.min(x) * np.reshape(np.ones_like(x), (1,-1)),
+                        np.sum(cp_params[0] * cp_dmat.to_numpy(), axis=1)
+                       ))
 
         # for each segment
         for segment in range(self.num_segments):
@@ -1036,18 +1046,40 @@ class bayes_parametric(bayes_base):
             #effective_x = x - cps[segment]
             #effective_x = np.clip(effective_x, 0, None)
             # make x values left of segment 0
+            #print('x: ' + str(x))
+            #print('cps[segment]: ' + str(cps[segment]))
             obs_in_segment = x >= cps[segment]
+            #print('obs_in_segment: ' + str(obs_in_segment))
             effective_x = x - cps[segment]
+            #print('effective_x: ' + str(effective_x))
             effective_x[np.logical_not(obs_in_segment)] = 0
+            #print('effective_x: ' + str(effective_x))
+            # TODO
+            # this is using the data in self.segment_dmatrices
+            # should use data argument to generate a new dmatrix
             effective_x_dmat = self.segment_dmatrices[segment].assign(**{self.x_var:effective_x})
+            #print('effective_x_dmat: ' + str(effective_x_dmat))
 
             # add predictions to "running" totals
             y_hat += np.sum(segment_params[segment] * effective_x_dmat.to_numpy(), axis=1)
 
-            if debug:
+
+            if False and segment == 1:
+                print('DOrF')
+                print(cps)
+                print(cps[segment])
+                print(cp_dmat.head())
+                print(np.sum(cp_params[0] * cp_dmat.to_numpy(), axis=1))
+                print(obs_in_segment)
+                print(data[self.x_var])
+                print(effective_x_dmat)
+                assert(False)
+
+
+            if False:
                 print('predicting segment #' +str(segment))
                 print('segment params: ' +str(segment_params[segment]))
-                print('cp_params: ' +str(cp_params[segment]))
+                #print('cp_params: ' +str(cp_params[segment]))
                 print('cp: ' +str(cps[segment]))
                 # broken down for debugging
                 a = data[self.x_var]
@@ -1062,19 +1094,20 @@ class bayes_parametric(bayes_base):
                 print('sum: ' +str(f))
                 e = f.reshape([-1,1])
                 print('reshape: ' +str(e))
+                print('y_hat: ' +str(y_hat))
 
             # boolean indicating which datapoints are "in" current segment
             #comp = data[self.x_var] < np.squeeze(cps[segment])
             # mask segment predictions to only appropriate datapoints
             #temp = np.where(comp, np.squeeze(zeros), np.squeeze(e))
 
-            if debug:
+            if False:
                 print('eshp'+str(e.shape))
                 print('yhtshp'+str(y_hat.shape))
                 print('cpshp'+str(cps.shape))
                 print('cp: '+str(cps))
-                print('cmpshp'+str(comp.shape))
-                print('cmp: '+str(comp))
+                #print('cmpshp'+str(comp.shape))
+                #print('cmp: '+str(comp))
                 print('obs_in_segment: '+str(obs_in_segment))
                 print('temp: '+str(temp))
                 print('e: ' +str(e))
