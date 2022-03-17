@@ -274,7 +274,7 @@ class bayes_base(ABC):
 
 
     @abstractmethod
-    def gen_start_point_byprior(self, num_walkers):
+    def gen_start_point_byhand(self, num_walkers):
         raise NotImplementedError("Must override gen_start_point_byprior()")
 
 
@@ -394,6 +394,8 @@ class bayes_nonparametric(bayes_base):
 
         # for each changepoint
         cps = self.prior[param_idx].rvs(size=num_walkers)
+        # the last of each Dirichlet draw is useless
+        # (it just allows the sample to sum to 1)
         cps = np.delete(cps, -1, axis=1)
         #print('p0 type:\t' + str(type(p0)))
         #print('p0 len:\t' + str(len(p0)))
@@ -635,17 +637,18 @@ class bayes_nonparametric(bayes_base):
         # extract primary predictor variable from new data
         #print('pname: ' + str(self.x_var))
         #print('data: ' + str(data))
-        x = data[self.x_var].to_numpy(dtype=float).reshape([-1,1])
+        #x = data[self.x_var].to_numpy(dtype=float).reshape([-1,1])
+        x = data[self.x_var].to_numpy(dtype=float)
         # reconstruct intercept vector
-        intercept = np.ones_like(x) * self.segment_dmatrices[0]['Intercept'].to_numpy()[0]
+        #intercept = np.ones_like(x) * self.segment_dmatrices[0]['Intercept'].to_numpy()[0]
         y_hat = np.zeros((x.shape[0],))
-        zeros = np.zeros_like(x)
+        #zeros = np.zeros_like(x)
 
         # add in a dummy changepoint at min(x)
         cp_params = np.append([0], cp_params)
 
         # untransform changepoints from [0,1] to [min(x), max(x)]
-        # but make sure to use the original data's x values to do so
+        # but make sure to use the *original* data's x values to do so
         cps = np.min(self.data[self.x_var].values) + (cp_params * np.ptp(self.data[self.x_var].values))
 
         # for each segment
@@ -663,10 +666,19 @@ class bayes_nonparametric(bayes_base):
             #effective_x = x - cps[segment]
             #effective_x = np.clip(effective_x, 0, None)
             # make x values left of segment 0
-            obs_in_segment = x >= cps[segment]
             effective_x = x - cps[segment]
-            effective_x[np.logical_not(obs_in_segment)] = 0
+            #effective_x[np.logical_not(obs_in_segment)] = 0
             effective_x_dmat = self.segment_dmatrices[segment].assign(**{self.x_var:effective_x})
+            #obs_in_segment = x >= cps[segment]
+            #effective_x_dmat.loc[np.logical_not(obs_in_segment)] = 0
+            print('Riffendorder')
+            print(x < cps[segment])
+            print(effective_x_dmat)
+            print(x.shape)
+            print((x < cps[segment]).shape)
+            effective_x_dmat.loc[x < cps[segment]] = 0
+            print(effective_x_dmat)
+            print('Riff out!')
 
             # add predictions to "running" totals
             y_hat += np.sum(segment_params[segment] * effective_x_dmat.values, axis=1)
@@ -683,6 +695,7 @@ class bayes_nonparametric(bayes_base):
                 c = effective_x
                 print('xs: ' +str(x))
                 print('eff. xs: ' +str(c))
+                print('eff. x dmat: ' +str(effective_x_dmat))
                 d = b * c
                 print('product: ' +str(d))
                 f = np.sum(d, axis=1)
@@ -700,13 +713,9 @@ class bayes_nonparametric(bayes_base):
                 print('yhtshp'+str(y_hat.shape))
                 print('cpshp'+str(cps.shape))
                 print('cp: '+str(cps))
-                print('cmpshp'+str(comp.shape))
-                print('cmp: '+str(comp))
                 print('obs_in_segment: '+str(obs_in_segment))
-                print('temp: '+str(temp))
                 print('e: ' +str(e))
-                print('y_hatpreupdate: ' +str(y_hat))
-                print('y_hatpostupdate: ' +str(y_hat+temp))
+                print('y_hatpostupdate: ' +str(y_hat))
 
 
         return y_hat
@@ -1052,12 +1061,13 @@ class bayes_parametric(bayes_base):
             #print('obs_in_segment: ' + str(obs_in_segment))
             effective_x = x - cps[segment]
             #print('effective_x: ' + str(effective_x))
-            effective_x[np.logical_not(obs_in_segment)] = 0
+            #effective_x[np.logical_not(obs_in_segment)] = 0
             #print('effective_x: ' + str(effective_x))
             # TODO
             # this is using the data in self.segment_dmatrices
             # should use data argument to generate a new dmatrix
             effective_x_dmat = self.segment_dmatrices[segment].assign(**{self.x_var:effective_x})
+            effective_x_dmat.loc[x < cps[segment]] = 0
             #print('effective_x_dmat: ' + str(effective_x_dmat))
 
             # add predictions to "running" totals
