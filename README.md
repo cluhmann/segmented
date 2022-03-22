@@ -137,13 +137,14 @@ This class is a new addition to segmented and, as the name implies, takes a Baye
 
 - Unlimited number of segments
 - Unlimited number of predictor variables
+- Both non-parameteric and parametric changepoints
+- Both connected **and disconnected** segments
 
-These features make the Bayes class a bit more sophisticated than the segmented class.  But the Bayes class is still limited to :
+But the Bayes class is still limited to :
 
 - Identity link functions
-- Connected models only
 
-In addition, the Bayes class **has not yet implemented parametric changepoints**.  This feature is on the way and once the Bayes class reaches feature parity with the segmented class, it will replace segmented as the primary focus of the package.
+These features make the Bayes class quite a bit more sophisticated than the segmented class.  For this reason, the Bayes class will replace segmented as the primary focus of the package.
 
 Here is an example of the Bayes class in use:
 
